@@ -1,0 +1,22 @@
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+
+# Dependencies and builds
+node_modules/
+.next/
+out/
+dist/
+.netlify/
+
+# Supabase CLI local state
+supabase/.branches
+supabase/.temp
+
+# OS / editor
+.DS_Store
+*.log
+.vscode/*
+!.vscode/extensions.json
+.idea/

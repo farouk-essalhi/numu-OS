@@ -1,0 +1,25 @@
+# Decisions
+
+One line per decision and why. Newest at the bottom. "Proposed" = drafted in Phase 0, needs Ali and Farouk's sign-off; change the tag to "Agreed" (or rewrite the line) at the workshop.
+
+| # | Date | Status | Decision | Why |
+| --- | --- | --- | --- | --- |
+| 1 | 2026-10-31 | Proposed | Money is `bigint` minor units in `*_minor` columns with a `currency` column (default QAR), not "fils" columns | Same rule as the plan (QAR × 100, no decimals), but leaves room for a client billed in USD |
+| 2 | 2026-10-31 | Proposed | Dates are Doha dates; SQL uses `private.qatar_today()`; week is Sun–Sat, working days Sun–Thu | Due dates and "this week" must match how the team works, regardless of server time zone |
+| 3 | 2026-10-31 | Proposed | Roles come from `team_members.access_level` and `contacts.user_id`; no separate profiles table | Keeps to the planned tables; a person has one row that says what they can do |
+| 4 | 2026-10-31 | Proposed | Invite-only login: signups off, logins linked to people by email automatically | Nobody outside NUMU and its clients can create an account; adding a person and inviting them is one step |
+| 5 | 2026-10-31 | Proposed | Retainers and projects (fees) are visible to partners and account leads only; creators see scope, not prices | Client pricing shouldn't leak to the whole team; account leads run the client relationship |
+| 6 | 2026-10-31 | Proposed | Clients get no direct table access; the phase 3 portal uses narrow functions that hide internal comments and revision counts | RLS can hide rows but not columns; a function boundary is the safe way to give clients a partial view |
+| 7 | 2026-10-31 | Proposed | Deliverable types are a lookup table with effort points, not an enum | Points will be tuned; changing a row is easier than changing a type |
+| 8 | 2026-10-31 | Proposed | The monthly generator lives in Postgres and runs from pg_cron on the 25th, 09:00 Doha | Runs even if the app is down; the same function serves the app, cron and (later) Claude via MCP |
+| 9 | 2026-10-31 | Proposed | Generator is idempotent (unique scope line + month + seq); raising a quantity adds the difference, lowering never deletes | Safe to re-run by hand; deleting planned work automatically would surprise people |
+| 10 | 2026-10-31 | Proposed | Generated due dates are spread evenly over the month's working days; post dates stay empty until scheduling | Gives a sensible default plan for Sunday planning; real post dates come from the content calendar |
+| 11 | 2026-10-31 | Proposed | `due_date` = ready for Client review; `post_date` = go-live; overdue = past due and still with the team, or approved but not posted on time | Separates the team's deadline from the client's publishing date, so late work and slow approvals aren't mixed up |
+| 12 | 2026-10-31 | Proposed | Status history is written only by a trigger; revision count only by the trigger (Client review → earlier status = +1) | The on-time and turnaround metrics are only worth something if nobody can edit the history |
+| 13 | 2026-10-31 | Proposed | Only partners and account leads move work into/out of Client review or into Approved; any other move is free, steps can be skipped | Protects sign-off without making daily card moves slower than WhatsApp |
+| 14 | 2026-10-31 | Proposed | Every deliverable belongs to exactly one retainer or project; a retainer item without a scope line is an "extra outside scope" | Lets us see over-servicing per client, which feeds margin |
+| 15 | 2026-10-31 | Proposed | A retainer starting mid-month still gets the full monthly quantity; the account lead trims it | Pro-rating rules vary per contract; a person decides faster than a rule |
+| 16 | 2026-10-31 | Proposed | Price changes create a new retainer row; quantity changes edit the scope line | Keeps invoice history true without versioning every scope line |
+| 17 | 2026-10-31 | Proposed | Posted does not require a post link in the database (the app asks for one) | Stories and some formats have no permanent link; a hard rule would block real work |
+| 18 | 2026-10-31 | Proposed | Only Phase 1 tables are migrated now; later tables are documented in `docs/schema.md` and migrated in their phase | "Build only what we use weekly"; schemas are cheaper to change before they exist |
+| 19 | 2026-10-31 | Proposed | Database tests are pgTAP, runnable on the Supabase stack (`supabase test db`) or plain Postgres (`scripts/db/test.sh`) | Access rules are the biggest risk (client/finance leaks), so they are tested automatically, not only by hand at each gate |
