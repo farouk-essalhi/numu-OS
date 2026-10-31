@@ -20,3 +20,9 @@ supabase/.temp
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Next.js / TypeScript
+next-env.d.ts
+*.tsbuildinfo
+/coverage
+*.pem

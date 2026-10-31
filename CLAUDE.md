@@ -10,7 +10,7 @@ Read before building anything: this file, then `docs/schema.md`. Why things are 
 
 ## Current phase
 
-**Phase 0 (Map and decide), Nov 1–14 2026.** The Phase 1 database is drafted and tested, waiting for sign-off. No app code yet.
+**Phase 0 (Map and decide), Nov 1–14 2026.** The Phase 1 database is drafted and tested, waiting for sign-off. The app's screens exist on demo data (no backend yet) so the workshop can react to them.
 
 Phase 0 gate (all must be true before Phase 1 starts):
 - [ ] Ali and Farouk have signed off on this spec and `docs/schema.md`
@@ -21,11 +21,11 @@ Phase 0 gate (all must be true before Phase 1 starts):
 **Next: Phase 1 (Core production), Nov 15–Dec 5.** Goal: the team runs daily work in NUMU OS instead of ClickUp.
 - [x] Database: clients, contacts, retainers, scope lines, projects, deliverables, status history, comments, RLS (`supabase/migrations`, tested)
 - [x] Monthly deliverable generator (database function + pg_cron on the 25th), with tests
-- [ ] Next.js app: magic-link login, role-aware navigation, installable (PWA)
-- [ ] Clients, contacts, retainers and scope lines screens
-- [ ] Production board (by status, by client, by person) and My work
-- [ ] Deliverable detail: links, comments, status history
-- [ ] One-off projects (the first real campaign goes in here)
+- [x] App shell and design system: role-aware navigation, light/dark, installable (PWA manifest)
+- [x] Screens on demo data: My work, board (by status, client, person), pulse, schedule, clients, client detail, deliverable detail (move, links, comments, history), new deliverable
+- [ ] Connect to Supabase: magic-link login, read/write through RLS (swap `lib/store.tsx`, nothing else)
+- [ ] Clients, contacts, retainers and scope lines: create and edit screens
+- [ ] One-off projects: create and edit (the first real campaign goes in here)
 
 Phase 1 gate: all active clients and December deliverables are in the system; the whole team used My work every day for a week; two weeks alongside ClickUp with nothing missing.
 
@@ -39,7 +39,8 @@ Later phases (do not build yet): 2 Money (Dec 6–19), 3 Clients in the loop (De
 - **Every database change is a new migration** in `supabase/migrations/` (`YYYYMMDDHHMMSS_name.sql`). Never edit a migration that has run on the real project. Add or update tests in `supabase/tests/` in the same change.
 - **Record decisions.** Anything that changes behaviour, the schema or scope gets one line in `docs/decisions.md`.
 - **After each module:** review what you built against the gate checklist above and list anything missing or risky.
-- Run `scripts/db/test.sh` before pushing any database change.
+- Run `scripts/db/test.sh` before pushing any database change, and `npm run lint && npm test && npm run build` before pushing app changes.
+- **This Next.js (16.x) differs from older versions** (Cache Components, routes kept mounted with `<Activity>`, `use(browser())`). Read the relevant guide in `node_modules/next/dist/docs/` before writing Next.js code (see `AGENTS.md`).
 
 ## Users and roles
 
@@ -102,13 +103,20 @@ supabase/migrations/      every database change, in order
 supabase/seed.sql         fictional clients, retainers and a month of deliverables
 supabase/tests/           pgTAP tests (generator, workflow, access per role)
 scripts/db/               run migrations + tests on plain Postgres (no Docker)
-app/ components/ lib/     Next.js (phase 1, not started)
+app/(app)/                screens (My work, pulse, board, schedule, clients, deliverable, profile)
+components/               UI kit (ui.tsx), visuals (heatmap, orbs, ruler), cards, shell, sheets
+lib/                      types (mirror the DB), dates (Doha), workflow rules, selectors, store
+lib/demo/                 demo data until Supabase exists (fictional)
 mcp/                      Claude connection (phase 5)
 ```
 
 ## Commands
 
 ```bash
+npm run dev             # app on http://localhost:3000 (demo data)
+npm test                # unit tests: dates, workflow rules, selectors, demo data
+npm run lint && npm run typecheck && npm run build
+
 # Database tests on any Postgres 15+ with pgTAP (no Docker). Uses PG* env vars.
 scripts/db/test.sh
 
@@ -127,3 +135,11 @@ Not yet (later phases): invoices, payments, expenses, partner draws (2) · conte
 ## Design
 
 Calm and fast. One clear number per screen (each dashboard opens on the number that matters to that person). Dark mode. Mobile first for the team (move cards from a shoot), desktop first for partners. If something takes longer in NUMU OS than in WhatsApp, fix the app, not the people.
+
+The visual language (from the reference screens Farouk shared), all tokens in `app/globals.css`:
+- Warm greige background (`bg`), soft cards (`surface`, 26px radius), grouped grey rows (`inset`), ink text, one dark pill for the main action (`.pill-primary`).
+- The one big number is set in dot-matrix numerals (`DotNumber`, Doto). Swipeable focus cards with a warm glow and the status ruler on Home.
+- Glass orbs for the week (`WeekOrbs`), a posting heatmap (`Heatmap`), hatched bars for client progress (`TypeBars`), a coloured left bar for status on cards.
+- Floating tab bar (My work · Pulse · Board · Profile) with the + button for New deliverable (partners and leads only). Schedule and Clients open from the header.
+- Bottom sheets (vaul) with native pickers over grouped rows: fastest on phones.
+- Use the existing components before adding new ones; status colours come from `STATUS_META[status].tone`.

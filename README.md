@@ -9,7 +9,21 @@ NUMU's internal system for retainers, deliverables, client approvals and money. 
 
 ## Status
 
-Phase 0. The Phase 1 database (clients, retainers, scope, projects, deliverables, status history, comments, access rules and the monthly deliverable generator) is drafted and covered by tests. The Next.js app starts once the spec is signed off.
+Phase 0. The Phase 1 database (clients, retainers, scope, projects, deliverables, status history, comments, access rules and the monthly deliverable generator) is drafted and covered by tests. The app's screens run on fictional demo data until the Supabase project exists.
+
+## Running the app
+
+```bash
+npm install
+npm run dev        # http://localhost:3000
+```
+
+Best viewed at phone width. Profile → "View as" switches between a partner, an account lead and a creator to see what each role gets. Light and dark follow the device, or set them in Profile → Appearance.
+
+```bash
+npm test           # unit tests
+npm run lint && npm run typecheck && npm run build
+```
 
 ## Running the database tests
 
