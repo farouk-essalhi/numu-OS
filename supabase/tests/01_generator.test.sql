@@ -2,7 +2,7 @@
 -- right owners, safe to re-run, and only for active retainers of active clients.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(24);
+select plan(25);
 
 create function pg_temp.login(p_user uuid) returns void language plpgsql as $$
 begin
@@ -221,6 +221,30 @@ select ok(
              and month = date_trunc('month', (private.qatar_today() + interval '1 month')::timestamp)::date),
   '...where next month is counted from today in Doha'
 );
+
+-- ---------------------------------------------------------------------------
+-- Schedule: the job on the 25th exists wherever pg_cron is installed
+-- (always on Supabase; skipped on plain Postgres).
+-- ---------------------------------------------------------------------------
+create function pg_temp.generator_is_scheduled() returns boolean language plpgsql as $$
+declare
+  v_found boolean;
+begin
+  if not exists (select 1 from pg_extension where extname = 'pg_cron') then
+    return null;
+  end if;
+  execute $q$ select exists (select 1 from cron.job
+                              where jobname = 'numu-generate-next-month'
+                                and schedule = '0 6 25 * *'
+                                and command = 'select public.generate_month_deliverables()') $q$
+    into v_found;
+  return v_found;
+end $$;
+
+select case
+  when pg_temp.generator_is_scheduled() is null then skip('pg_cron is not installed here', 1)
+  else ok(pg_temp.generator_is_scheduled(), 'pg_cron runs the generator at 06:00 UTC (09:00 Doha) on the 25th')
+end;
 
 -- ---------------------------------------------------------------------------
 -- Who can run it
