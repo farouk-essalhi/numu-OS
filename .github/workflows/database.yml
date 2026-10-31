@@ -1,0 +1,44 @@
+name: Database
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # Migrations + seed + pgTAP tests on plain Postgres with the Supabase shim.
+  postgres:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Postgres and install pgTAP
+        run: |
+          PGVER=$(ls /usr/lib/postgresql | sort -V | tail -1)
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq "postgresql-${PGVER}-pgtap"
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -qc "alter user postgres password 'postgres'"
+
+      - name: Run database tests
+        env:
+          PGHOST: localhost
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: scripts/db/test.sh
+
+  # The same migrations and tests on the real Supabase Postgres image
+  # (real auth schema, default grants and pg_cron).
+  supabase:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.0
+
+      - name: Start the local Supabase database
+        run: supabase db start
+
+      - name: Run pgTAP tests
+        run: supabase test db
