@@ -15,7 +15,7 @@ Read before building anything: this file, then `docs/schema.md`. Why things are 
 Phase 0 gate (all must be true before Phase 1 starts):
 - [ ] Ali and Farouk have signed off on this spec and `docs/schema.md`
 - [ ] Every active client's retainer scope is written down (types, quantities, fee, billing day). Use `docs/phase-0.md`
-- [ ] Repo, Supabase project and Netlify site exist
+- [ ] Repo, Supabase project and Netlify site exist (Netlify: done, https://numu-os.netlify.app, demo data; Supabase: not yet)
 - [ ] Open questions in `docs/phase-0.md` are answered, and `docs/decisions.md` updated
 
 **Next: Phase 1 (Core production), Nov 15–Dec 5.** Goal: the team runs daily work in NUMU OS instead of ClickUp.
@@ -98,6 +98,7 @@ CLAUDE.md                 this spec: rules, current phase
 docs/schema.md            tables, fields, statuses, access matrix, metrics
 docs/decisions.md         one line per decision and why
 docs/phase-0.md           workshop agenda, open questions, scope template, setup, backlog
+netlify.toml              Netlify build settings (Next.js runtime)
 supabase/config.toml      local Supabase settings (invite-only auth)
 supabase/migrations/      every database change, in order
 supabase/seed.sql         fictional clients, retainers and a month of deliverables
@@ -119,6 +120,11 @@ npm run lint && npm run typecheck && npm run build
 
 # Database tests on any Postgres 15+ with pgTAP (no Docker). Uses PG* env vars.
 scripts/db/test.sh
+
+# Deploy: Netlify project "numu-os" (https://numu-os.netlify.app), built by Netlify from
+# netlify.toml (npm run build, publish .next, @netlify/plugin-nextjs). Not connected to Git yet:
+# each deploy is an upload, so pushes do not redeploy. Without the plugin it publishes the raw
+# .next folder and every page 404s.
 
 # Or the full local Supabase stack (needs Docker)
 supabase start          # API, Studio, local inbox for magic links
