@@ -1,0 +1,8 @@
+# Netlify builds the app itself; the Next.js runtime (@netlify/plugin-nextjs)
+# is added automatically and turns server features into Netlify Functions.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "22"
