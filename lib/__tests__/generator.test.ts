@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { friendlyError, payloadFor } from "../backend";
 import { buildDemoDataset } from "../demo/data";
-import { generateMonth } from "../generator";
+import { pinnedDueDate } from "../dates";
+import { generatedTitle, generateMonth } from "../generator";
 import type { Dataset } from "../types";
 
 const today = "2026-11-04";
@@ -63,6 +64,20 @@ describe("monthly generator (demo copy of generate_month_deliverables)", () => {
     const lead = demo.clients.find((c) => c.id === retainer.client_id)!.account_lead_id;
     const out = generateMonth(data, "2026-12-01", { now, newId: ids }).deliverables.filter((d) => d.scope_line_id === line.id);
     expect(out.every((d) => d.owner_id === lead)).toBe(true);
+  });
+
+  it("names one-a-month items without 1/1 and pins their due day, like the SQL", () => {
+    const out = generateMonth(demo, "2027-02-01", { now, newId: ids });
+    const calendar = out.deliverables.find((d) => d.deliverable_type === "content_calendar")!;
+    expect(calendar.title).toBe("Content calendar");
+    // 20 Feb 2027 is a Saturday: the next working day is Sunday the 21st.
+    expect(calendar.due_date).toBe("2027-02-21");
+    const report = out.deliverables.find((d) => d.deliverable_type === "report" && d.client_id === "cl-dune")!;
+    expect(report.due_date).toBe("2027-02-03");
+    expect(generatedTitle("Reel", 3, 6, "instagram")).toBe("Reel 3/6 · Instagram");
+    // Same cases as 04_tasks.test.sql: Fri 20 Feb 2026 -> Sun 22nd; the 31st -> the last working day.
+    expect(pinnedDueDate("2026-02-01", 20)).toBe("2026-02-22");
+    expect(pinnedDueDate("2026-02-01", 31)).toBe("2026-02-26");
   });
 
   it("does nothing on an empty workspace", () => {

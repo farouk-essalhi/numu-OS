@@ -57,7 +57,7 @@ export default function ClientPage() {
   const monthlyPoints = scope.reduce((n, s) => n + s.quantity_per_month * (types.get(s.deliverable_type)?.effort_points ?? 0), 0);
 
   const tabs: { value: Tab; label: string; count?: number }[] = [
-    { value: "work", label: formatMonth(thisMonth), count: summary.total },
+    { value: "work", label: formatMonth(thisMonth), count: summary.rows.length },
     { value: "scope", label: "Retainer & scope", count: scope.length },
     { value: "people", label: "Contacts", count: contacts.length },
   ];
@@ -175,7 +175,7 @@ export default function ClientPage() {
               <Empty>
                 {plans
                   ? retainer
-                    ? "Add what the retainer buys each month: e.g. 6 Reels on Instagram, 8 Static posts."
+                    ? "Add what happens each month: content (e.g. 6 Reels on Instagram) and recurring tasks (e.g. the report on the 3rd)."
                     : "No retainer yet. Add one to set the monthly fee and scope."
                   : "No monthly scope yet."}
               </Empty>
@@ -194,6 +194,7 @@ export default function ClientPage() {
                           {s.platform ? <span className="font-normal text-muted"> · {PLATFORM_LABEL[s.platform]}</span> : null}
                         </p>
                         <p className="truncate text-[12px] text-muted">
+                          {s.quantity_per_month === 1 && s.due_day ? `due on day ${s.due_day} · ` : ""}
                           {type.effort_points} pts each · usually {owner ? firstName(owner.full_name) : "the account lead"}
                           {s.notes ? ` · ${s.notes}` : ""}
                         </p>
@@ -352,7 +353,7 @@ function RetainerBar({
       </div>
     );
   }
-  const warn = retainer.status !== "active" ? "Not active, so no deliverables are generated" : !clientActive ? "The client isn't active, so no deliverables are generated" : null;
+  const warn = retainer.status !== "active" ? "Not active, so nothing is generated" : !clientActive ? "The client isn't active, so nothing is generated" : null;
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 bg-surface-2/60 px-4 py-3.5 sm:px-5">
       <div className="min-w-0">
@@ -391,7 +392,7 @@ function GenerateButtons({ retainer, clientActive }: { retainer: Retainer; clien
     if (!r.ok) return notify(r.reason, "error");
     notify(
       r.created
-        ? `Created ${r.created} deliverable${r.created === 1 ? "" : "s"} for ${formatMonth(month)}`
+        ? `Created ${r.created} ${r.created === 1 ? "item" : "items"} for ${formatMonth(month)}`
         : `${formatMonth(month)} already has everything in scope`,
       r.created ? "success" : "info",
     );

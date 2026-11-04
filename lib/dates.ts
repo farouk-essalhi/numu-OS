@@ -104,6 +104,23 @@ export function spreadDueDate(month: IsoDate, seq: number, quantity: number): Is
   return days[Math.floor(((2 * seq - 1) * days.length) / (2 * quantity))];
 }
 
+/**
+ * Due date for a scope line pinned to a day of the month: that day, or the
+ * next working day; the month's last working day if the month runs out.
+ * Same rule as public.generate_month_deliverables().
+ */
+export function pinnedDueDate(month: IsoDate, day: number): IsoDate {
+  const days = workingDaysOfMonth(month);
+  const last = Number(monthEnd(month).slice(8, 10));
+  const target = `${month.slice(0, 8)}${String(Math.min(day, last)).padStart(2, "0")}`;
+  return days.find((d) => d >= target) ?? days[days.length - 1];
+}
+
+/** Where the generator puts item `seq` of a scope line. */
+export function scopeDueDate(month: IsoDate, seq: number, quantity: number, dueDay: number | null): IsoDate {
+  return dueDay && quantity === 1 ? pinnedDueDate(month, dueDay) : spreadDueDate(month, seq, quantity);
+}
+
 const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_LONG = [

@@ -11,10 +11,11 @@ import {
   dayNumber,
   monthEnd,
   monthStart,
-  spreadDueDate,
+  scopeDueDate,
 } from "../dates";
+import { generatedTitle } from "../generator";
 import { PLATFORM_LABEL } from "../format";
-import { flowFor, statusIndex, STATUSES } from "../workflow";
+import { flowFor, isTaskType, statusIndex, STATUSES } from "../workflow";
 import type {
   Client,
   Comment,
@@ -34,14 +35,20 @@ import type {
 export const DEMO_DEFAULT_USER = "tm-rand";
 
 export const DELIVERABLE_TYPES: DeliverableType[] = [
-  { code: "reel", name_en: "Reel", name_ar: "ريل", effort_points: 3, sort_order: 10 },
-  { code: "static_post", name_en: "Static post", name_ar: "منشور ثابت", effort_points: 1, sort_order: 20 },
-  { code: "carousel", name_en: "Carousel", name_ar: "منشور كاروسيل", effort_points: 2, sort_order: 30 },
-  { code: "story_set", name_en: "Story set", name_ar: "مجموعة ستوريز", effort_points: 1, sort_order: 40 },
-  { code: "long_video", name_en: "Long video", name_ar: "فيديو طويل", effort_points: 5, sort_order: 50 },
-  { code: "shoot_day", name_en: "Shoot day", name_ar: "يوم تصوير", effort_points: 5, sort_order: 60 },
-  { code: "ad_set", name_en: "Ad set", name_ar: "مجموعة إعلانات", effort_points: 2, sort_order: 70 },
-  { code: "influencer_post", name_en: "Influencer post", name_ar: "منشور مؤثر", effort_points: 2, sort_order: 80 },
+  { code: "reel", name_en: "Reel", name_ar: "ريل", effort_points: 3, sort_order: 10, is_content: true },
+  { code: "static_post", name_en: "Static post", name_ar: "منشور ثابت", effort_points: 1, sort_order: 20, is_content: true },
+  { code: "carousel", name_en: "Carousel", name_ar: "منشور كاروسيل", effort_points: 2, sort_order: 30, is_content: true },
+  { code: "story_set", name_en: "Story set", name_ar: "مجموعة ستوريز", effort_points: 1, sort_order: 40, is_content: true },
+  { code: "long_video", name_en: "Long video", name_ar: "فيديو طويل", effort_points: 5, sort_order: 50, is_content: true },
+  { code: "shoot_day", name_en: "Shoot day", name_ar: "يوم تصوير", effort_points: 5, sort_order: 60, is_content: true },
+  { code: "ad_set", name_en: "Ad set", name_ar: "مجموعة إعلانات", effort_points: 2, sort_order: 70, is_content: true },
+  { code: "influencer_post", name_en: "Influencer post", name_ar: "منشور مؤثر", effort_points: 2, sort_order: 80, is_content: true },
+  // Tasks: work that isn't content (to do or done)
+  { code: "follow_up", name_en: "Client follow-up", name_ar: "متابعة مع العميل", effort_points: 1, sort_order: 110, is_content: false },
+  { code: "content_calendar", name_en: "Content calendar", name_ar: "تقويم المحتوى", effort_points: 2, sort_order: 120, is_content: false },
+  { code: "report", name_en: "Report", name_ar: "تقرير", effort_points: 2, sort_order: 130, is_content: false },
+  { code: "meeting", name_en: "Meeting", name_ar: "اجتماع", effort_points: 1, sort_order: 140, is_content: false },
+  { code: "task", name_en: "Other task", name_ar: "مهمة أخرى", effort_points: 1, sort_order: 150, is_content: false },
 ];
 
 // NUMU's team (first names only; emails are dummy @numu.test addresses).
@@ -98,20 +105,29 @@ const CONTACTS: Contact[] = [
   { id: "ct-jassim", client_id: "cl-sandline", full_name: "Jassim Darwish", job_title: "General manager", phone: "+97455500006", email: "jassim@sandline.example", is_approver: true, preferred_language: "en" },
 ];
 
-type ScopeSpec = [ScopeLine["deliverable_type"], number, ScopeLine["platform"], string | null];
+type ScopeSpec = [ScopeLine["deliverable_type"], number, ScopeLine["platform"], string | null, number?];
 
 const RETAINER_SPECS: { id: string; client: string; monthsAgo: number; fee: number; scope: ScopeSpec[] }[] = [
   {
     id: "rt-dune", client: "cl-dune", monthsAgo: 5, fee: 1_800_000,
-    scope: [["reel", 6, "instagram", "tm-anas"], ["static_post", 8, "instagram", "tm-ruba"], ["story_set", 4, "instagram", "tm-rand"]],
+    scope: [
+      ["reel", 6, "instagram", "tm-anas"], ["static_post", 8, "instagram", "tm-ruba"], ["story_set", 4, "instagram", "tm-rand"],
+      ["report", 1, null, "tm-rand", 3], ["content_calendar", 1, null, "tm-rand", 20],
+    ],
   },
   {
     id: "rt-marina", client: "cl-marina", monthsAgo: 4, fee: 1_500_000,
-    scope: [["reel", 4, "instagram", "tm-anas"], ["carousel", 6, "instagram", "tm-ruba"], ["shoot_day", 1, null, "tm-khaled"]],
+    scope: [
+      ["reel", 4, "instagram", "tm-anas"], ["carousel", 6, "instagram", "tm-ruba"], ["shoot_day", 1, null, "tm-khaled"],
+      ["follow_up", 4, null, "tm-rand"],
+    ],
   },
   {
     id: "rt-falcon", client: "cl-falcon", monthsAgo: 8, fee: 3_200_000,
-    scope: [["reel", 8, "instagram", "tm-anas"], ["reel", 4, "tiktok", "tm-busafen"], ["ad_set", 2, "instagram", "tm-ruba"], ["long_video", 1, "youtube", "tm-khaled"]],
+    scope: [
+      ["reel", 8, "instagram", "tm-anas"], ["reel", 4, "tiktok", "tm-busafen"], ["ad_set", 2, "instagram", "tm-ruba"], ["long_video", 1, "youtube", "tm-khaled"],
+      ["report", 1, null, "tm-farouk", 3], ["meeting", 1, null, "tm-farouk", 10],
+    ],
   },
   {
     id: "rt-sidra", client: "cl-sidra", monthsAgo: 1, fee: 1_200_000,
@@ -168,7 +184,7 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
       billing_day: null,
       notes: null,
     });
-    spec.scope.forEach(([type, qty, platform, owner], i) => {
+    spec.scope.forEach(([type, qty, platform, owner, dueDay], i) => {
       scopeLines.push({
         id: `${spec.id}-sl${i + 1}`,
         retainer_id: spec.id,
@@ -176,6 +192,7 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
         quantity_per_month: qty,
         platform,
         default_owner_id: owner,
+        due_day: dueDay ?? null,
         notes: null,
       });
     });
@@ -229,7 +246,7 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
       for (const sl of scopeLines.filter((s) => s.retainer_id === r.id)) {
         const type = typeByCode.get(sl.deliverable_type)!;
         for (let seq = 1; seq <= sl.quantity_per_month; seq++) {
-          const due = spreadDueDate(month, seq, sl.quantity_per_month);
+          const due = scopeDueDate(month, seq, sl.quantity_per_month, sl.due_day);
           const d: Deliverable = {
             id: `dl-${sl.id}-${month.slice(0, 7)}-${seq}`,
             client_id: r.client_id,
@@ -237,7 +254,7 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
             scope_line_id: sl.id,
             project_id: null,
             deliverable_type: sl.deliverable_type,
-            title: `${type.name_en} ${seq}/${sl.quantity_per_month}${sl.platform ? ` · ${PLATFORM_LABEL[sl.platform]}` : ""}`,
+            title: generatedTitle(type.name_en, seq, sl.quantity_per_month, sl.platform),
             month,
             seq,
             platform: sl.platform,
@@ -375,6 +392,11 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
 /** Move a generated item to where it would plausibly be today. */
 function moveAlong(d: Deliverable, today: IsoDate) {
   const rand = seeded(d.id);
+  if (isTaskType(d.deliverable_type)) {
+    // Tasks: done once their day has passed, with the odd one forgotten.
+    d.status = d.due_date < today && rand() > 0.08 ? "done" : "planned";
+    return;
+  }
   const r1 = rand();
   const r2 = rand();
   const r3 = rand();

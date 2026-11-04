@@ -100,6 +100,11 @@ describe("workflow rules (same as the database trigger)", () => {
     expect(canMove("creator", "approved", "scheduled").ok).toBe(true);
     expect(canMove("account_lead", "internal_review", "client_review").ok).toBe(true);
     expect(canMove("partner", "client_review", "approved").ok).toBe(true);
+    // Tasks are to do or done; content never uses Done.
+    expect(canMove("creator", "planned", "done", "follow_up").ok).toBe(true);
+    expect(canMove("creator", "done", "planned", "report").ok).toBe(true);
+    expect(canMove("partner", "planned", "editing", "content_calendar").ok).toBe(false);
+    expect(canMove("partner", "posted", "done", "reel").ok).toBe(false);
   });
 
   it("counts a revision when work comes back from the client", () => {

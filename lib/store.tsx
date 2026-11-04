@@ -46,6 +46,9 @@ const VIEW_AS_KEY = "numu.demo.viewAs";
 export interface NewDeliverableInput {
   client_id: string;
   project_id: string | null;
+  /** Set when it repeats: the scope line it belongs to (seq 1 of its month), on this retainer. */
+  scope_line_id?: string | null;
+  retainer_id?: string | null;
   deliverable_type: Deliverable["deliverable_type"];
   title: string;
   platform: Deliverable["platform"];
@@ -303,24 +306,29 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
 
   const create = useCallback(
     (input: NewDeliverableInput) => {
-      if (role === "creator") return { ok: false as const, reason: "Partners and account leads add deliverables" };
-      const retainer = input.project_id
-        ? null
-        : data.retainers.find((r) => r.client_id === input.client_id && r.status === "active");
-      if (!input.project_id && !retainer) return { ok: false as const, reason: "This client has no active retainer" };
+      if (role === "creator") return { ok: false as const, reason: "Partners and account leads add tasks" };
       const type = data.deliverableTypes.find((t) => t.code === input.deliverable_type)!;
+      // Content counts against a campaign or the client's active retainer (an
+      // extra outside scope). A task can stand alone, or sit on a campaign, or
+      // repeat through a scope line on the retainer.
+      const retainerId = input.project_id
+        ? null
+        : (input.retainer_id ??
+          (type.is_content ? data.retainers.find((r) => r.client_id === input.client_id && r.status === "active")?.id : null) ??
+          null);
+      if (type.is_content && !input.project_id && !retainerId) return { ok: false as const, reason: "This client has no active retainer" };
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const d: Deliverable = {
         id,
         client_id: input.client_id,
-        retainer_id: retainer?.id ?? null,
-        scope_line_id: null, // added by hand = an extra outside scope
+        retainer_id: retainerId,
+        scope_line_id: input.scope_line_id ?? null, // none on content = an extra outside scope
         project_id: input.project_id,
         deliverable_type: input.deliverable_type,
         title: input.title.trim(),
         month: monthStart(input.due_date),
-        seq: null,
+        seq: input.scope_line_id ? 1 : null,
         platform: input.platform,
         owner_id: input.owner_id,
         due_date: input.due_date,

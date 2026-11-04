@@ -18,7 +18,8 @@ export type DeliverableStatus =
   | "client_review"
   | "approved"
   | "scheduled"
-  | "posted";
+  | "posted"
+  | "done"; // tasks only
 
 export type Platform =
   | "instagram"
@@ -37,7 +38,13 @@ export type DeliverableTypeCode =
   | "long_video"
   | "shoot_day"
   | "ad_set"
-  | "influencer_post";
+  | "influencer_post"
+  // Tasks: work that isn't content (to do or done)
+  | "follow_up"
+  | "content_calendar"
+  | "report"
+  | "meeting"
+  | "task";
 
 export type IsoDate = string; // "YYYY-MM-DD"
 export type IsoTimestamp = string;
@@ -48,6 +55,8 @@ export interface DeliverableType {
   name_ar: string;
   effort_points: number;
   sort_order: number;
+  /** false = a task (to do or done), not content. */
+  is_content: boolean;
 }
 
 export interface TeamMember {
@@ -104,6 +113,8 @@ export interface ScopeLine {
   quantity_per_month: number;
   platform: Platform | null;
   default_owner_id: string | null;
+  /** Day of the month it's due (quantity 1 only); null = spread evenly. */
+  due_day: number | null;
   notes: string | null;
 }
 

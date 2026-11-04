@@ -34,9 +34,9 @@ export default function DeliverablePage() {
     return (
       <Card>
         <Empty>
-          This deliverable doesn&apos;t exist.{" "}
+          This task doesn&apos;t exist.{" "}
           <Link href="/deliverables" className="font-medium text-ink underline">
-            Back to deliverables
+            Back to tasks
           </Link>
         </Empty>
       </Card>
@@ -44,8 +44,9 @@ export default function DeliverablePage() {
   }
 
   const next = nextStatus(row.deliverable_type, row.status);
-  const nextOk = next ? canMove(role, row.status, next) : null;
+  const nextOk = next ? canMove(role, row.status, next, row.deliverable_type) : null;
   const project = row.project_id ? data.projects.find((p) => p.id === row.project_id) : null;
+  const isTask = !row.type.is_content;
 
   function go(to: DeliverableStatus) {
     const res = move(row!.id, to);
@@ -60,7 +61,7 @@ export default function DeliverablePage() {
     <>
       <nav aria-label="Breadcrumb" className="mb-3 flex items-center gap-1 text-[12.5px] text-muted">
         <Link href="/deliverables" className="hover:text-ink">
-          Deliverables
+          Tasks
         </Link>
         <ChevronRight className="size-3.5" />
         <Link href={`/clients/${row.client_id}`} className="truncate hover:text-ink">
@@ -76,11 +77,13 @@ export default function DeliverablePage() {
             <Pill>{row.type.name_en}</Pill>
             {row.platform ? <Pill>{PLATFORM_LABEL[row.platform]}</Pill> : null}
             {project ? <Pill tone="info">{project.name_en}</Pill> : null}
-            {row.retainer_id && !row.scope_line_id ? <Pill tone="info">Extra outside scope</Pill> : null}
+            {row.type.is_content && row.retainer_id && !row.scope_line_id ? <Pill tone="info">Extra outside scope</Pill> : null}
+            {!row.type.is_content && row.scope_line_id ? <Pill>Repeats monthly</Pill> : null}
             <FlagPills row={row} today={today} />
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
+{isTask ? null : (
           <label className="relative">
             <span className="sr-only">Move to</span>
             <select
@@ -90,7 +93,7 @@ export default function DeliverablePage() {
             >
               <option value="">Move to…</option>
               {STATUSES.filter((s) => s !== row.status).map((s) => {
-                const c = canMove(role, row.status, s);
+                const c = canMove(role, row.status, s, row.deliverable_type);
                 return (
                   <option key={s} value={s} disabled={!c.ok}>
                     {STATUS_META[s].en}
@@ -101,6 +104,7 @@ export default function DeliverablePage() {
             </select>
             <ChevronRight className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 rotate-90 text-muted" />
           </label>
+          )}
           {row.status === "client_review" && role !== "creator" ? (
             <>
               <Button onClick={() => go("editing")} title="Client asked for changes (counts a revision)">
@@ -112,7 +116,19 @@ export default function DeliverablePage() {
             </>
           ) : next && nextOk?.ok ? (
             <Button variant="primary" onClick={() => go(next)}>
-              {STATUS_META[next].en} <ArrowRight />
+              {next === "done" ? (
+                <>
+                  <Check /> Mark done
+                </>
+              ) : (
+                <>
+                  {STATUS_META[next].en} <ArrowRight />
+                </>
+              )}
+            </Button>
+          ) : isTask && row.status === "done" ? (
+            <Button onClick={() => go("planned")}>
+              <RotateCcw /> Reopen
             </Button>
           ) : null}
           {role !== "creator" ? <DeleteButton id={row.id} /> : null}
@@ -128,12 +144,18 @@ export default function DeliverablePage() {
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
           <Card>
-            <CardHeader title="Files and links" subtitle="Google Drive stays the file store; NUMU OS keeps the links." />
+            <CardHeader title={isTask ? "Link" : "Files and links"} subtitle="Google Drive stays the file store; NUMU OS keeps the links." />
             <ul className="divide-y divide-line border-t border-line">
-              <LinkRow label="Script" url={row.script_url} onSave={(v) => patch({ script_url: v })} />
-              <LinkRow label="Raw footage" url={row.raw_url} onSave={(v) => patch({ raw_url: v })} />
-              <LinkRow label="Final file" url={row.final_url} onSave={(v) => patch({ final_url: v })} />
-              <LinkRow label="Live post" url={row.post_url} onSave={(v) => patch({ post_url: v })} />
+              {isTask ? (
+                <LinkRow label={row.deliverable_type === "report" ? "Report" : row.deliverable_type === "content_calendar" ? "Calendar" : "Link"} url={row.final_url} onSave={(v) => patch({ final_url: v })} />
+              ) : (
+                <>
+                  <LinkRow label="Script" url={row.script_url} onSave={(v) => patch({ script_url: v })} />
+                  <LinkRow label="Raw footage" url={row.raw_url} onSave={(v) => patch({ raw_url: v })} />
+                  <LinkRow label="Final file" url={row.final_url} onSave={(v) => patch({ final_url: v })} />
+                  <LinkRow label="Live post" url={row.post_url} onSave={(v) => patch({ post_url: v })} />
+                </>
+              )}
             </ul>
           </Card>
 
@@ -207,15 +229,19 @@ export default function DeliverablePage() {
                   {row.client.name_en}
                 </Link>
               </Prop>
-              <Prop label="Counts against">{project ? project.name_en : `${formatMonth(row.month)} retainer`}</Prop>
-              <Prop label="Due for review">
+              <Prop label={isTask ? "Part of" : "Counts against"}>
+                {project ? project.name_en : row.retainer_id ? (isTask ? "Monthly scope" : `${formatMonth(row.month)} retainer`) : "Just the client"}
+              </Prop>
+              <Prop label={isTask ? "Due" : "Due for review"}>
                 <DateEdit value={row.due_date} onChange={(v) => v && patch({ due_date: v })} danger={row.flags.overdue} />
               </Prop>
-              <Prop label="Goes live">
-                <DateEdit value={row.post_date} onChange={(v) => patch({ post_date: v || null })} />
-              </Prop>
+              {isTask ? null : (
+                <Prop label="Goes live">
+                  <DateEdit value={row.post_date} onChange={(v) => patch({ post_date: v || null })} />
+                </Prop>
+              )}
               <Prop label="Effort">{row.effort_points} points</Prop>
-              <Prop label="Client revisions">{row.revision_count}</Prop>
+              {isTask ? null : <Prop label="Client revisions">{row.revision_count}</Prop>}
               {row.posted_at ? <Prop label="Posted">{formatShort(qatarDate(row.posted_at))}</Prop> : null}
             </dl>
           </Card>
@@ -337,13 +363,13 @@ function DeleteButton({ id }: { id: string }) {
     <Button
       variant="ghost"
       className={sure ? "text-critical hover:text-critical" : "text-muted"}
-      title="Delete this deliverable"
-      aria-label={sure ? "Confirm delete" : "Delete deliverable"}
+      title="Delete"
+      aria-label={sure ? "Confirm delete" : "Delete"}
       onClick={async () => {
         if (!sure) return setSure(true);
         const r = await remove("deliverables", id);
         if (!r.ok) return notify(r.reason, "error");
-        notify("Deliverable deleted", "success");
+        notify("Deleted", "success");
         router.push("/deliverables");
       }}
       onBlur={() => setSure(false)}

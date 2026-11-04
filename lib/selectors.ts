@@ -127,8 +127,13 @@ export interface ClientMonth {
   byType: { code: string; name: string; total: number; done: number }[];
 }
 
+/**
+ * A client's month. `rows` holds everything (deliverables and tasks); the
+ * counts are content only, so tasks don't change delivery numbers.
+ */
 export function clientMonth(rows: BoardRow[], client: Client, month: IsoDate, today: IsoDate): ClientMonth {
-  const list = rows.filter((r) => r.client_id === client.id && r.month === month).sort(byDue);
+  const all = rows.filter((r) => r.client_id === client.id && r.month === month).sort(byDue);
+  const list = all.filter((r) => r.type.is_content);
   const types = new Map<string, { code: string; name: string; total: number; done: number }>();
   for (const r of list) {
     const t = types.get(r.deliverable_type) ?? { code: r.deliverable_type, name: r.type.name_en, total: 0, done: 0 };
@@ -138,14 +143,14 @@ export function clientMonth(rows: BoardRow[], client: Client, month: IsoDate, to
   }
   return {
     client,
-    rows: list,
+    rows: all,
     total: list.length,
     posted: list.filter((r) => r.status === "posted").length,
     done: list.filter((r) => isDone(r.status)).length,
     waiting: list.filter((r) => r.status === "client_review").length,
     overdue: list.filter((r) => r.flags.overdue).length,
     extras: list.filter((r) => r.retainer_id && !r.scope_line_id).length,
-    nextDue: list.find((r) => isWithTeam(r.status) && r.due_date >= today) ?? null,
+    nextDue: all.find((r) => isWithTeam(r.status) && r.due_date >= today) ?? null,
     byType: [...types.values()],
   };
 }
@@ -203,7 +208,7 @@ export function pulse(rows: BoardRow[], data: Dataset, range: Range, today: IsoD
     }
   }
 
-  const approved = rows.filter((r) => isDone(r.status) && r.due_date >= from && r.due_date <= to);
+  const approved = rows.filter((r) => r.type.is_content && isDone(r.status) && r.due_date >= from && r.due_date <= to);
 
   // Heatmap: deliverables posted per day, whole weeks ending this week.
   const heatStart = addDays(weekStart(today), -7 * (heatWeeks - 1));
@@ -218,7 +223,7 @@ export function pulse(rows: BoardRow[], data: Dataset, range: Range, today: IsoD
     return { day, count: day > today ? -1 : counts.get(day) ?? 0 };
   });
 
-  const inRange = rows.filter((r) => r.due_date >= from && r.due_date <= to);
+  const inRange = rows.filter((r) => r.type.is_content && r.due_date >= from && r.due_date <= to);
   const byClient = data.clients
     .map((client) => {
       const list = inRange.filter((r) => r.client_id === client.id);

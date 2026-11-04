@@ -34,7 +34,7 @@ export const NAV: { title?: string; items: NavItem[] }[] = [
   {
     title: "Production",
     items: [
-      { href: "/deliverables", label: "Deliverables", icon: SquareKanban },
+      { href: "/deliverables", label: "Tasks", icon: SquareKanban },
       { href: "/calendar", label: "Calendar", icon: CalendarDays },
     ],
   },

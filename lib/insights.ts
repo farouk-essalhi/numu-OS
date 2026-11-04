@@ -89,18 +89,19 @@ export const STAGES: { key: Stage; label: string; statuses: DeliverableStatus[] 
   { key: "production", label: "In production", statuses: ["planned", "scripting", "shooting", "editing"] },
   { key: "review", label: "In review", statuses: ["internal_review", "client_review"] },
   { key: "ready", label: "Approved", statuses: ["approved", "scheduled"] },
-  { key: "live", label: "Live", statuses: ["posted"] },
+  { key: "live", label: "Live", statuses: ["posted", "done"] },
 ];
 
 export function stageOf(status: DeliverableStatus): Stage {
   return STAGES.find((s) => s.statuses.includes(status))!.key;
 }
 
-/** Deliverables due on each working day of the month, split by stage. */
+/** Deliverables (content, not tasks) due on each working day of the month, split by stage. */
 export function deliveryByDay(rows: BoardRow[], month: IsoDate) {
   const days = workingDaysOfMonth(month);
+  const content = rows.filter((r) => r.type.is_content);
   return days.map((day) => {
-    const due = rows.filter((r) => r.due_date === day);
+    const due = content.filter((r) => r.due_date === day);
     const counts = { production: 0, review: 0, ready: 0, live: 0 } as Record<Stage, number>;
     for (const r of due) counts[stageOf(r.status)] += 1;
     return { day, ...counts, total: due.length };
@@ -108,7 +109,7 @@ export function deliveryByDay(rows: BoardRow[], month: IsoDate) {
 }
 
 export function stageMix(rows: BoardRow[], month: IsoDate) {
-  const list = rows.filter((r) => r.month === month);
+  const list = rows.filter((r) => r.month === month && r.type.is_content);
   return {
     total: list.length,
     stages: STAGES.map((s) => ({ ...s, count: list.filter((r) => s.statuses.includes(r.status)).length })),
@@ -303,7 +304,7 @@ export function approvalHours(data: Dataset, from: IsoDate, to: IsoDate): Map<st
 export function clientReports(rows: BoardRow[], data: Dataset, from: IsoDate, to: IsoDate): ClientReport[] {
   const approvals = approvalHours(data, from, to);
   return data.clients.map((client) => {
-    const mine = rows.filter((r) => r.client_id === client.id);
+    const mine = rows.filter((r) => r.client_id === client.id && r.type.is_content);
     const ot = onTimeBetween(mine, from, to);
     const approved = mine.filter((r) => isDone(r.status) && r.due_date >= from && r.due_date <= to);
     const hours = mine.flatMap((r) => approvals.get(r.id) ?? []);

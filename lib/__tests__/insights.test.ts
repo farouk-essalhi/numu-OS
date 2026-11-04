@@ -26,17 +26,18 @@ describe("dashboard numbers", () => {
     expect(change(3, 0)).toBeNull();
   });
 
-  it("splits the month's work by stage without losing any", () => {
+  it("splits the month's content by stage without losing any (tasks aren't content)", () => {
     const mix = stageMix(rows, month);
     expect(mix.stages.reduce((n, s) => n + s.count, 0)).toBe(mix.total);
-    expect(mix.total).toBe(rows.filter((r) => r.month === month).length);
+    expect(mix.total).toBe(rows.filter((r) => r.month === month && r.type.is_content).length);
+    expect(rows.some((r) => r.month === month && !r.type.is_content)).toBe(true); // the demo has tasks
   });
 
   it("charts every working day and counts each due deliverable once", () => {
     const days = deliveryByDay(rows, month);
     expect(days.every((d) => isWorkingDay(d.day))).toBe(true);
     const charted = days.reduce((n, d) => n + d.total, 0);
-    const dueOnWorkingDays = rows.filter((r) => r.due_date.startsWith("2026-11") && isWorkingDay(r.due_date)).length;
+    const dueOnWorkingDays = rows.filter((r) => r.type.is_content && r.due_date.startsWith("2026-11") && isWorkingDay(r.due_date)).length;
     expect(charted).toBe(dueOnWorkingDays);
     for (const d of days) expect(d.production + d.review + d.ready + d.live).toBe(d.total);
   });

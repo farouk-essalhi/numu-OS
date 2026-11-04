@@ -48,16 +48,23 @@ Sign-off (into/out of Client review, into Approved) is limited to partners and a
 
 Fixed list in `deliverable_types` (changed by migration only). Effort points drive capacity planning and are proposals until the Phase 0 workshop confirms them.
 
-| code | English | Arabic | Points |
-| --- | --- | --- | --- |
-| `reel` | Reel | ريل | 3 |
-| `static_post` | Static post | منشور ثابت | 1 |
-| `carousel` | Carousel | منشور كاروسيل | 2 |
-| `story_set` | Story set | مجموعة ستوريز | 1 |
-| `long_video` | Long video | فيديو طويل | 5 |
-| `shoot_day` | Shoot day | يوم تصوير | 5 |
-| `ad_set` | Ad set | مجموعة إعلانات | 2 |
-| `influencer_post` | Influencer post | منشور مؤثر | 2 |
+`is_content` splits the list. **Content** goes through production, client review and posting. **Tasks** (`is_content = false`) are the rest of agency work: they are to do (`planned`) or `done`, can stand alone on a client (no retainer or campaign), and are left out of content metrics (on time, approval time, revisions, stage mix, client progress). Everything is a "task" in the app; content tasks are "deliverables".
+
+| code | English | Arabic | Points | Content |
+| --- | --- | --- | --- | --- |
+| `reel` | Reel | ريل | 3 | yes |
+| `static_post` | Static post | منشور ثابت | 1 | yes |
+| `carousel` | Carousel | منشور كاروسيل | 2 | yes |
+| `story_set` | Story set | مجموعة ستوريز | 1 | yes |
+| `long_video` | Long video | فيديو طويل | 5 | yes |
+| `shoot_day` | Shoot day | يوم تصوير | 5 | yes |
+| `ad_set` | Ad set | مجموعة إعلانات | 2 | yes |
+| `influencer_post` | Influencer post | منشور مؤثر | 2 | yes |
+| `follow_up` | Client follow-up | متابعة مع العميل | 1 | task |
+| `content_calendar` | Content calendar | تقويم المحتوى | 2 | task |
+| `report` | Report | تقرير | 2 | task |
+| `meeting` | Meeting | اجتماع | 1 | task |
+| `task` | Other task | مهمة أخرى | 1 | task |
 
 Arabic labels need a check by a native speaker on the team.
 
@@ -74,6 +81,7 @@ Arabic labels need a check by a native speaker on the team.
 | 7 | `approved` | Approved | معتمد | |
 | 8 | `scheduled` | Scheduled | مجدول | Needs a post date |
 | 9 | `posted` | Posted | منشور | Post link added; `posted_at` stamped |
+| 10 | `done` | Done | تم | Tasks only (not content) |
 
 The enum is in this order, so `status < 'client_review'` means "still with the team".
 
@@ -83,6 +91,8 @@ The enum is in this order, so `status < 'client_review'` means "still with the t
 3. `scheduled` requires `post_date`.
 4. `posted` sets `posted_at` (keeps a value the app sends, so "posted yesterday" works); leaving `posted` clears it.
 5. Every change of status inserts a `status_events` row with who made it. Creation logs `null → planned`.
+6. Tasks (non-content types) can only be `planned` or `done`; content can never be `done`.
+7. Content needs exactly one retainer or project; a task needs at most one (a client is always required).
 
 Any other move is allowed, including skipping steps.
 
@@ -158,9 +168,10 @@ What a retainer buys each month.
 | quantity_per_month | smallint | 1–100 |
 | platform | platform | `instagram`, `tiktok`, `snapchat`, `youtube`, `x`, `linkedin`, `facebook`; null for e.g. shoot days |
 | default_owner_id | uuid → team_members | Who gets generated items; else the account lead |
+| due_day | smallint | 1–31, quantity 1 only: due that day of the month, or the next working day (the last working day if the month ends first). Null = spread evenly |
 | notes | text | |
 
-Changing a quantity affects months not yet generated. Re-running the generator after an increase adds the difference.
+Scope lines cover recurring tasks too: "1 Report a month, due on the 3rd", "1 Content calendar, due on the 20th", "4 Client follow-ups" (about weekly). Changing a quantity affects months not yet generated. Re-running the generator after an increase adds the difference.
 
 ### projects
 One-off campaigns: a client, a fixed fee, a deliverable list and a deadline, no monthly repeat.
@@ -182,11 +193,11 @@ Every piece of work. The production board.
 | --- | --- | --- |
 | id | uuid | |
 | client_id | uuid → clients | Set from the retainer/project by trigger; mismatches rejected |
-| retainer_id | uuid → retainers | Exactly one of retainer_id / project_id |
+| retainer_id | uuid → retainers | Content: exactly one of retainer_id / project_id. Tasks: at most one |
 | scope_line_id | uuid → scope_lines | Must belong to the retainer. Null on a retainer item = extra outside scope |
 | project_id | uuid → projects | |
 | deliverable_type | text → deliverable_types | |
-| title | text | Generator: "Reel 3/6 · Instagram" |
+| title | text | Generator: "Reel 3/6 · Instagram"; "Report" when there is one a month |
 | month | date | 1st of the month it counts against; defaults from `due_date` |
 | seq | smallint | 1..quantity within its scope line and month (generator) |
 | platform | platform | Copied from the scope line by default |

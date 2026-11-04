@@ -26,7 +26,7 @@ export const ENTITIES = {
   },
   scopeLines: {
     table: "scope_lines",
-    columns: ["retainer_id", "deliverable_type", "quantity_per_month", "platform", "default_owner_id", "notes"],
+    columns: ["retainer_id", "deliverable_type", "quantity_per_month", "platform", "default_owner_id", "due_day", "notes"],
   },
   projects: {
     table: "projects",
@@ -35,7 +35,7 @@ export const ENTITIES = {
   deliverables: {
     table: "deliverables",
     columns: [
-      "client_id", "retainer_id", "scope_line_id", "project_id", "deliverable_type", "title", "month", "platform",
+      "client_id", "retainer_id", "scope_line_id", "project_id", "deliverable_type", "title", "month", "seq", "platform",
       "owner_id", "due_date", "post_date", "effort_points", "script_url", "raw_url", "final_url", "post_url",
     ],
   },
@@ -76,7 +76,7 @@ export async function loadDataset(sb: Supabase): Promise<Dataset> {
       all((a, b) =>
         sb
           .from("deliverables")
-          .select(cols("deliverables", "id,seq,status,revision_count,posted_at,created_at"))
+          .select(cols("deliverables", "id,status,revision_count,posted_at,created_at"))
           .order("id")
           .range(a, b),
       ),
@@ -171,6 +171,7 @@ export function friendlyError(error: Pick<PostgrestError, "code" | "message" | "
     case "23514":
       if (/retainers_dates_check|projects_dates_check/.test(msg)) return "The end date must be after the start date";
       if (/quantity_per_month/.test(msg)) return "Quantity must be between 1 and 100";
+      if (/due_day/.test(msg)) return "The due day must be between 1 and 31";
       if (/billing_day/.test(msg)) return "Billing day must be between 1 and 31";
       if (/email/.test(msg)) return "That email doesn't look right";
       return msg.startsWith("new row") ? "Some values aren't allowed" : msg;

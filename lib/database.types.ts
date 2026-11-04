@@ -15,7 +15,8 @@ type Enums = {
     | "client_review"
     | "approved"
     | "scheduled"
-    | "posted";
+    | "posted"
+    | "done";
   employment_type: "full_time" | "part_time" | "freelance";
   language_code: "ar" | "en";
   platform: "instagram" | "tiktok" | "snapchat" | "youtube" | "x" | "linkedin" | "facebook";
@@ -38,8 +39,8 @@ export type Database = {
   public: {
     Tables: {
       deliverable_types: Table<
-        { code: string; name_en: string; name_ar: string; effort_points: number; sort_order: number },
-        "sort_order"
+        { code: string; name_en: string; name_ar: string; effort_points: number; sort_order: number; is_content: boolean },
+        "sort_order" | "is_content"
       >;
       team_members: Table<
         {
@@ -114,9 +115,10 @@ export type Database = {
           quantity_per_month: number;
           platform: Enums["platform"] | null;
           default_owner_id: string | null;
+          due_day: number | null;
           notes: string | null;
         } & Stamps,
-        "id" | "platform" | "default_owner_id" | "notes" | keyof Stamps
+        "id" | "platform" | "default_owner_id" | "due_day" | "notes" | keyof Stamps
       >;
       projects: Table<
         {

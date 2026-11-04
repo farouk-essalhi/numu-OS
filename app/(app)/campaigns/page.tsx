@@ -55,7 +55,7 @@ export default function CampaignsPage() {
       <EditSheet edit={edit} onClose={() => setEdit(null)} />
       <Card className="overflow-hidden">
         {campaigns.length === 0 ? (
-          <Empty>{data.clients.length ? "No campaigns yet. Add one, then add its deliverables with New deliverable." : "Add a client first, then their campaigns."}</Empty>
+          <Empty>{data.clients.length ? "No campaigns yet. Add one, then add its deliverables and tasks with New task." : "Add a client first, then their campaigns."}</Empty>
         ) : null}
         <ul className="divide-y divide-line">
           {campaigns.map(({ project: p, client, total, done, late }) => {

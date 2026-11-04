@@ -6,9 +6,14 @@
 // + seq), so running it twice adds nothing. The live app calls the database
 // function instead; a test keeps the two in line.
 
-import { monthEnd, monthStart, spreadDueDate } from "./dates";
+import { monthEnd, monthStart, scopeDueDate } from "./dates";
 import { PLATFORM_LABEL } from "./format";
-import type { Dataset, Deliverable, IsoDate, StatusEvent } from "./types";
+import type { Dataset, Deliverable, IsoDate, Platform, StatusEvent } from "./types";
+
+/** "Reel 3/6 · Instagram"; "Report" when there's one a month. Same as the SQL. */
+export function generatedTitle(typeName: string, seq: number, quantity: number, platform: Platform | null): string {
+  return `${typeName}${quantity > 1 ? ` ${seq}/${quantity}` : ""}${platform ? ` · ${PLATFORM_LABEL[platform]}` : ""}`;
+}
 
 export function generateMonth(
   data: Dataset,
@@ -51,12 +56,12 @@ export function generateMonth(
           scope_line_id: sl.id,
           project_id: null,
           deliverable_type: sl.deliverable_type,
-          title: `${type.name_en} ${seq}/${sl.quantity_per_month}${sl.platform ? ` · ${PLATFORM_LABEL[sl.platform]}` : ""}`,
+          title: generatedTitle(type.name_en, seq, sl.quantity_per_month, sl.platform),
           month: first,
           seq,
           platform: sl.platform,
           owner_id: owner,
-          due_date: spreadDueDate(first, seq, sl.quantity_per_month),
+          due_date: scopeDueDate(first, seq, sl.quantity_per_month, sl.due_day),
           post_date: null,
           status: "planned",
           revision_count: 0,

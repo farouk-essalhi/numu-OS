@@ -89,7 +89,7 @@ export default function DeliverablesPage() {
   const canDrop = useCallback(
     (row: BoardRow, to: string): DropCheck => {
       if (group === "person") return { ok: true };
-      const check = canMove(role, row.status, to as DeliverableStatus);
+      const check = canMove(role, row.status, to as DeliverableStatus, row.deliverable_type);
       if (!check.ok) return check;
       if (to === "scheduled" && !row.post_date) return { ok: false, reason: "Set a post date first: open the card and add it" };
       return { ok: true };
@@ -123,8 +123,8 @@ export default function DeliverablesPage() {
   return (
     <>
       <PageHeader
-        title="Deliverables"
-        subtitle={projectName ? `${projectName} · ${visible.length} deliverables` : `${visible.length} in ${formatMonth(month)}${month === planningMonth ? ", plus anything unfinished from before" : ""}`}
+        title="Tasks"
+        subtitle={projectName ? `${projectName} · ${visible.length} tasks` : `${visible.length} in ${formatMonth(month)}${month === planningMonth ? ", plus anything unfinished from before" : ""}`}
         actions={
           <>
             {!project ? (
@@ -164,7 +164,7 @@ export default function DeliverablesPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Filter by title, client, owner"
-            aria-label="Filter deliverables"
+            aria-label="Filter tasks"
             className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted"
           />
         </label>
@@ -212,7 +212,7 @@ export default function DeliverablesPage() {
                 ? "Start by adding your clients, their retainers and what each buys a month."
                 : role === "creator"
                   ? "Your account lead plans the month; it shows up here."
-                  : "Open a client and generate the month from their scope, or add a deliverable by hand."}
+                  : "Open a client and generate the month from their scope, or add a task with New task."}
             </span>
             {role !== "creator" ? (
               <ButtonLink href="/clients" variant="primary" className="mt-4">
@@ -243,7 +243,7 @@ export default function DeliverablesPage() {
         </>
       ) : (
         <Card className="overflow-hidden">
-          <DeliverableTable rows={visible} today={today} empty="No deliverables match these filters." />
+          <DeliverableTable rows={visible} today={today} empty="Nothing matches these filters." />
         </Card>
       )}
     </>

@@ -155,7 +155,7 @@ export function KanbanBoard({
   }, [landed]);
 
   if (columns.length === 0)
-    return <Empty>No deliverables match these filters.</Empty>;
+    return <Empty>Nothing matches these filters.</Empty>;
 
   // ---------------------------------------------------------------------------
   // Drag engine (event handlers + animation frame; never runs during render)
@@ -534,7 +534,7 @@ export function KanbanBoard({
                 if (el) colEls.current.set(col.key, el);
                 else colEls.current.delete(col.key);
               }}
-              aria-label={`${col.title}, ${col.rows.length} deliverables`}
+              aria-label={`${col.title}, ${col.rows.length} tasks`}
               className={cn(
                 "relative flex shrink-0 snap-start flex-col rounded-xl border bg-surface-2 transition-[width,max-width,background-color,border-color,box-shadow] duration-200 ease-out",
                 slim
@@ -762,7 +762,9 @@ function CardBody({
             ]
               .filter(Boolean)
               .join(" · ")
-          : row.client.name_en}
+          : row.type.is_content || row.title.startsWith(row.type.name_en)
+            ? row.client.name_en
+            : `${row.client.name_en} · ${row.type.name_en}`}
       </p>
       <Steps row={row} />
       <div className="mt-2 flex flex-wrap items-center gap-1.5">

@@ -230,11 +230,11 @@ function Sidebar({
           <Button
             variant="primary"
             onClick={onNew}
-            title="New deliverable"
+            title="New task"
             className={cn("w-full", compact !== "never" && "px-0", compact === "below-lg" && "lg:px-3.5")}
           >
             <Plus />
-            <span className={label}>New deliverable</span>
+            <span className={label}>New task</span>
           </Button>
         ) : null}
       </div>
@@ -348,7 +348,7 @@ function TopBar({
           className="hidden h-9 w-[260px] items-center gap-2 rounded-lg border border-line bg-surface px-2.5 text-[13px] text-muted shadow-sm hover:text-ink lg:flex"
         >
           <Search className="size-4" />
-          <span className="flex-1 text-left">Search deliverables, clients…</span>
+          <span className="flex-1 text-left">Search tasks, clients…</span>
           <Kbd>⌘K</Kbd>
         </button>
         <IconButton label="Search" onClick={onSearch} className="lg:hidden">
@@ -357,7 +357,7 @@ function TopBar({
         <ThemeToggle />
         <Notifications />
         {onNew ? (
-          <IconButton label="New deliverable" onClick={onNew} className="bg-primary text-primary-ink hover:bg-primary hover:text-primary-ink hover:opacity-90 md:hidden">
+          <IconButton label="New task" onClick={onNew} className="bg-primary text-primary-ink hover:bg-primary hover:text-primary-ink hover:opacity-90 md:hidden">
             <Plus />
           </IconButton>
         ) : null}

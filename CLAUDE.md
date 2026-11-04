@@ -27,6 +27,7 @@ Phase 0 gate (all must be true before Phase 1 starts):
 - [x] Clients, contacts, retainers and scope lines: create and edit screens; "Generate {month}" per retainer
 - [x] One-off projects: create and edit (the first real campaign goes in here)
 - [x] Team members: add/edit (partners); board drag and drop by status and by person
+- [x] Tasks next to deliverables (follow-ups, reports, content calendars, meetings), recurring through the monthly scope
 - [ ] Enter every active client, retainer and scope; generate December
 
 Phase 1 gate: all active clients and December deliverables are in the system; the whole team used My work every day for a week; two weeks alongside ClickUp with nothing missing.
@@ -66,12 +67,15 @@ Reel 3 · Static post 1 · Carousel 2 · Story set 1 · Long video 5 · Shoot da
 
 **Nine statuses**, in order: Planned → Scripting → Shooting → Editing → Internal review → Client review → Approved → Scheduled → Posted. Cards may skip steps (a static post has no shoot).
 
+**Tasks** (decision 39): not all work is content. Follow-ups, reports, content calendars, meetings and other tasks are rows in the same `deliverables` table with a non-content type (`deliverable_types.is_content = false`): they are Planned (to do) or **Done** (a tenth status, tasks only), can belong to just a client, and stay out of content metrics. In the app everything is a "task" ("New task", the Tasks board); content tasks are "deliverables". Recurring tasks are scope lines (e.g. 1 Report a month, `due_day` 3), generated with the month.
+
 Rules, enforced in the database (not just the UI):
 - Only partners and account leads move work **into or out of Client review**, or **into Approved**.
 - **Client review → any earlier status = revision +1.** Nobody edits `revision_count` by hand.
 - **Scheduled needs a post date.** Marking **Posted** stamps `posted_at`.
 - Every status change writes a `status_events` row (trigger only, the app never writes history).
-- A deliverable belongs to exactly **one retainer or one project**. A retainer deliverable with no scope line is an **extra outside scope**.
+- A deliverable belongs to exactly **one retainer or one project**. A retainer deliverable with no scope line is an **extra outside scope**. A task needs a client and at most one of the two.
+- Tasks are only Planned or Done; content is never Done.
 
 Flags: **2+ revisions**; **in Client review for more than 48 hours**; **overdue** = still before Client review after the due date, or approved/scheduled but not posted after the post date.
 

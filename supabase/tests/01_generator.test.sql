@@ -115,8 +115,8 @@ select results_eq(
 
 select is(
   (select title from public.deliverables where scope_line_id = 'eeeeeeee-0000-4000-8000-000000000003'),
-  'Shoot day 1/1',
-  'no platform, no platform suffix'
+  'Shoot day',
+  'one a month: no "1/1", and no platform, no platform suffix'
 );
 
 select is(

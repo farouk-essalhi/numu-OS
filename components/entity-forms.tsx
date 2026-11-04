@@ -21,7 +21,7 @@ import type {
   ScopeLine,
   TeamMember,
 } from "@/lib/types";
-import { badUrl, Check, Field, Input, moneyText, orNull, parseMoney, Select, Sheet, SheetForm, TextArea } from "./forms";
+import { badUrl, Check, control, Field, Input, moneyText, orNull, parseMoney, Select, Sheet, SheetForm, TextArea } from "./forms";
 
 /** Which form is open. `row` absent = a new one. */
 export type Edit =
@@ -342,15 +342,19 @@ function ScopeForm({ retainerId, row, onDone }: { retainerId: string; row?: Scop
     quantity: row ? String(row.quantity_per_month) : "4",
     platform: (row ? (row.platform ?? "") : "instagram") as Platform | "",
     default_owner_id: row?.default_owner_id ?? "",
+    due_day: row?.due_day ? String(row.due_day) : "",
     notes: row?.notes ?? "",
   });
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((x) => ({ ...x, [k]: v }));
   const type = data.deliverableTypes.find((t) => t.code === f.deliverable_type);
+  const isTask = type ? !type.is_content : false;
   const qty = Number(f.quantity);
   const generated = row ? data.deliverables.filter((d) => d.scope_line_id === row.id && d.month >= thisMonth).length : 0;
 
   function onSubmit() {
     if (!Number.isInteger(qty) || qty < 1 || qty > 100) return setError("Quantity must be between 1 and 100");
+    const day = qty === 1 && f.due_day.trim() ? Number(f.due_day) : null;
+    if (day !== null && (!Number.isInteger(day) || day < 1 || day > 31)) return setError("The due day must be between 1 and 31");
     void submit(
       "scopeLines",
       {
@@ -358,8 +362,9 @@ function ScopeForm({ retainerId, row, onDone }: { retainerId: string; row?: Scop
         retainer_id: retainerId,
         deliverable_type: f.deliverable_type,
         quantity_per_month: qty,
-        platform: f.platform || null,
+        platform: isTask ? null : f.platform || null,
         default_owner_id: f.default_owner_id || null,
+        due_day: day,
         notes: orNull(f.notes),
       },
       row ? "Scope saved" : "Added to the monthly scope",
@@ -369,7 +374,7 @@ function ScopeForm({ retainerId, row, onDone }: { retainerId: string; row?: Scop
   return (
     <SheetForm
       title={row ? "Edit scope line" : "Add to monthly scope"}
-      description="What the retainer buys every month. The generator turns each line into numbered deliverables."
+      description="What happens for this client every month: content they buy, and recurring tasks like the report or the content calendar. Each line is created with the month."
       onClose={onDone}
       onSubmit={onSubmit}
       onDelete={row ? () => void destroy("scopeLines", row.id, "Removed from scope") : undefined}
@@ -380,20 +385,48 @@ function ScopeForm({ retainerId, row, onDone }: { retainerId: string; row?: Scop
     >
       <div className="grid grid-cols-[1fr_110px] gap-3">
         <Field label="Type">
-          <Select
+          <select
             value={f.deliverable_type}
-            onChange={(v) => set("deliverable_type", v)}
-            options={data.deliverableTypes.map((t) => ({ value: t.code, label: t.name_en }))}
-          />
+            onChange={(e) => {
+              const code = e.target.value as DeliverableTypeCode;
+              const next = data.deliverableTypes.find((t) => t.code === code);
+              setF((x) => ({ ...x, deliverable_type: code, quantity: next && !next.is_content && x.quantity === "4" && !row ? "1" : x.quantity }));
+            }}
+            className={control}
+          >
+            <optgroup label="Content">
+              {data.deliverableTypes.filter((t) => t.is_content).map((t) => (
+                <option key={t.code} value={t.code}>
+                  {t.name_en}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Recurring tasks">
+              {data.deliverableTypes.filter((t) => !t.is_content).map((t) => (
+                <option key={t.code} value={t.code}>
+                  {t.name_en}
+                </option>
+              ))}
+            </optgroup>
+          </select>
         </Field>
         <Field label="Per month">
           <Input value={f.quantity} onChange={(e) => set("quantity", e.target.value.replace(/\D/g, ""))} inputMode="numeric" className="num" />
         </Field>
       </div>
-      <Field label="Platform">
-        <Select value={f.platform} onChange={(v) => set("platform", v)} options={PLATFORM_OPTIONS} />
-      </Field>
-      <Field label="Usually made by" hint="Empty = the client's account lead">
+      {qty === 1 ? (
+        <Field label="Due on day" hint="Of the month, e.g. 3 for the report, 20 for next month's calendar. Moves to the next working day when needed. Empty = mid-month.">
+          <Input value={f.due_day} onChange={(e) => set("due_day", e.target.value.replace(/\D/g, "").slice(0, 2))} inputMode="numeric" placeholder="e.g. 20" className="num" />
+        </Field>
+      ) : (
+        <p className="text-[12px] text-muted">More than one a month: they&apos;re spread evenly over the working days{qty === 4 ? " (about one a week)" : ""}.</p>
+      )}
+      {!isTask ? (
+        <Field label="Platform">
+          <Select value={f.platform} onChange={(v) => set("platform", v)} options={PLATFORM_OPTIONS} />
+        </Field>
+      ) : null}
+      <Field label={isTask ? "Usually done by" : "Usually made by"} hint="Empty = the client's account lead">
         <Select
           value={f.default_owner_id}
           onChange={(v) => set("default_owner_id", v)}
@@ -401,12 +434,16 @@ function ScopeForm({ retainerId, row, onDone }: { retainerId: string; row?: Scop
         />
       </Field>
       <Field label="Notes">
-        <TextArea value={f.notes} onChange={(e) => set("notes", e.target.value)} placeholder="e.g. one of the reels is always a product feature" />
+        <TextArea
+          value={f.notes}
+          onChange={(e) => set("notes", e.target.value)}
+          placeholder={isTask ? "e.g. send as PDF to the marketing manager" : "e.g. one of the reels is always a product feature"}
+        />
       </Field>
       {type && Number.isInteger(qty) && qty > 0 ? (
         <p className="rounded-lg bg-surface-2 px-3 py-2.5 text-[12.5px] text-muted">
           {qty} × {type.name_en} = <span className="font-medium text-ink num">{qty * type.effort_points} pts</span> a month.
-          {row && generated ? ` Changing the quantity affects months not generated yet; ${formatMonth(thisMonth)} already has ${generated}.` : ""}
+          {row && generated ? ` Changes apply to months not generated yet; ${formatMonth(thisMonth)} already has ${generated}.` : ""}
         </p>
       ) : null}
     </SheetForm>
@@ -460,7 +497,7 @@ function ProjectForm({ clientId, row, onDone }: { clientId?: string; row?: Proje
         deadline: f.deadline || null,
         notes: orNull(f.notes),
       },
-      row ? "Campaign saved" : "Campaign added. Add its deliverables with New deliverable",
+      row ? "Campaign saved" : "Campaign added. Add its deliverables and tasks with New task",
     );
   }
 

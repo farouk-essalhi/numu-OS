@@ -22,6 +22,7 @@ export const STATUSES: DeliverableStatus[] = [
   "approved",
   "scheduled",
   "posted",
+  "done",
 ];
 
 /** Identity colour per status (a dot beside the label, never colour alone). */
@@ -35,6 +36,7 @@ export const STATUS_META: Record<DeliverableStatus, { en: string; ar: string; co
   approved:        { en: "Approved",        ar: "معتمد",           color: "var(--series-3)" },
   scheduled:       { en: "Scheduled",       ar: "مجدول",           color: "var(--series-6)" },
   posted:          { en: "Posted",          ar: "منشور",           color: "var(--ink)" },
+  done:            { en: "Done",            ar: "تم",              color: "var(--ink)" },
 };
 
 export function statusIndex(status: DeliverableStatus): number {
@@ -46,29 +48,45 @@ export function isWithTeam(status: DeliverableStatus): boolean {
   return statusIndex(status) < statusIndex("client_review");
 }
 
-/** Approved, scheduled or posted. */
+/** Approved, scheduled, posted, or a task that's done. */
 export function isDone(status: DeliverableStatus): boolean {
   return statusIndex(status) >= statusIndex("approved");
 }
 
+const TASK_FLOW: DeliverableStatus[] = ["planned", "done"];
+const CONTENT_FLOW: DeliverableStatus[] = STATUSES.filter((s) => s !== "done");
+
 /** The usual path for each type. Other moves are allowed; this drives "Next". */
 const FLOW: Record<DeliverableTypeCode, DeliverableStatus[]> = {
-  reel: STATUSES,
-  long_video: STATUSES,
+  reel: CONTENT_FLOW,
+  long_video: CONTENT_FLOW,
   shoot_day: ["planned", "shooting", "editing", "internal_review", "client_review", "approved", "scheduled", "posted"],
   influencer_post: ["planned", "scripting", "shooting", "internal_review", "client_review", "approved", "scheduled", "posted"],
   static_post: ["planned", "editing", "internal_review", "client_review", "approved", "scheduled", "posted"],
   carousel: ["planned", "editing", "internal_review", "client_review", "approved", "scheduled", "posted"],
   story_set: ["planned", "editing", "internal_review", "client_review", "approved", "scheduled", "posted"],
   ad_set: ["planned", "editing", "internal_review", "client_review", "approved", "scheduled", "posted"],
+  // Tasks: to do, then done.
+  follow_up: TASK_FLOW,
+  content_calendar: TASK_FLOW,
+  report: TASK_FLOW,
+  meeting: TASK_FLOW,
+  task: TASK_FLOW,
 };
 
+/** Task types: work that isn't content. Mirrors deliverable_types.is_content = false. */
+export const TASK_TYPES: DeliverableTypeCode[] = ["follow_up", "content_calendar", "report", "meeting", "task"];
+
+export function isTaskType(type: DeliverableTypeCode): boolean {
+  return TASK_TYPES.includes(type);
+}
+
 export function flowFor(type: DeliverableTypeCode): DeliverableStatus[] {
-  return FLOW[type];
+  return FLOW[type] ?? CONTENT_FLOW;
 }
 
 export function nextStatus(type: DeliverableTypeCode, current: DeliverableStatus): DeliverableStatus | null {
-  const flow = FLOW[type];
+  const flow = FLOW[type] ?? STATUSES;
   const i = flow.indexOf(current);
   if (i >= 0) return flow[i + 1] ?? null;
   // Off the usual path (e.g. a reel skipped scripting): next one after it.
@@ -77,9 +95,19 @@ export function nextStatus(type: DeliverableTypeCode, current: DeliverableStatus
 
 export type MoveCheck = { ok: true } | { ok: false; reason: string };
 
-/** Who may make a move. Same rule as private.deliverable_workflow(). */
-export function canMove(role: AccessLevel, from: DeliverableStatus, to: DeliverableStatus): MoveCheck {
+/**
+ * Who may make a move, and where a type can go. Same rules as
+ * private.deliverable_workflow(): tasks are to do or done; content never uses
+ * Done; only partners and account leads sign off.
+ */
+export function canMove(role: AccessLevel, from: DeliverableStatus, to: DeliverableStatus, type?: DeliverableTypeCode): MoveCheck {
   if (from === to) return { ok: false, reason: "Already there" };
+  if (type && isTaskType(type) && to !== "planned" && to !== "done") {
+    return { ok: false, reason: "A task is either to do or done" };
+  }
+  if (type && !isTaskType(type) && to === "done") {
+    return { ok: false, reason: "Content goes through review and ends at Posted" };
+  }
   const signOff = to === "client_review" || to === "approved" || from === "client_review";
   if (signOff && role === "creator") {
     return { ok: false, reason: "Partners and account leads sign off" };
@@ -98,7 +126,7 @@ export function applyMove(
   actor: { teamMemberId: string; role: AccessLevel },
   now: Date = new Date(),
 ): MoveResult {
-  const check = canMove(actor.role, d.status, to);
+  const check = canMove(actor.role, d.status, to, d.deliverable_type);
   if (!check.ok) return check;
   if (to === "scheduled" && !d.post_date) {
     return { ok: false, reason: "Set a post date before scheduling" };

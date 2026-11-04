@@ -18,7 +18,7 @@ interface Result {
   icon: ReactNode;
 }
 
-/** ⌘K: jump to any page, client or deliverable. */
+/** ⌘K: jump to any page, client, deliverable or task. */
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
   return <Palette onClose={onClose} />;
@@ -52,7 +52,7 @@ function Palette({ onClose }: { onClose: () => void }) {
           .slice(0, 8)
           .map((r) => ({
             key: r.id,
-            group: "Deliverables",
+            group: "Tasks",
             label: r.title,
             hint: `${r.client.name_en} · ${STATUS_META[r.status].en}`,
             href: `/deliverables/${r.id}`,
@@ -100,7 +100,7 @@ function Palette({ onClose }: { onClose: () => void }) {
                 onClose();
               }
             }}
-            placeholder="Search deliverables, clients, pages…"
+            placeholder="Search tasks, clients, pages…"
             aria-label="Search"
             className="h-12 flex-1 bg-transparent text-[14px] outline-none placeholder:text-muted"
           />

@@ -216,7 +216,7 @@ export function QuickMove({ row }: { row: BoardRow }) {
   const [error, setError] = useState<string | null>(null);
   const next = nextStatus(row.deliverable_type, row.status);
   if (!next) return null;
-  const check = canMove(role, row.status, next);
+  const check = canMove(role, row.status, next, row.deliverable_type);
   if (!check.ok) return null;
   return (
     <button
