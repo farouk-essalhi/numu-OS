@@ -31,7 +31,7 @@ import type {
   TeamMember,
 } from "../types";
 
-export const DEMO_DEFAULT_USER = "tm-noor";
+export const DEMO_DEFAULT_USER = "tm-rand";
 
 export const DELIVERABLE_TYPES: DeliverableType[] = [
   { code: "reel", name_en: "Reel", name_ar: "ريل", effort_points: 3, sort_order: 10 },
@@ -44,14 +44,16 @@ export const DELIVERABLE_TYPES: DeliverableType[] = [
   { code: "influencer_post", name_en: "Influencer post", name_ar: "منشور مؤثر", effort_points: 2, sort_order: 80 },
 ];
 
+// NUMU's team (first names only; emails are dummy @numu.test addresses).
+// The clients and all the work below stay fictional.
 const TEAM: TeamMember[] = [
   member("tm-farouk", "Farouk", "Partner", "partner", "full_time", 10),
   member("tm-ali", "Ali", "Partner", "partner", "full_time", 5),
-  member("tm-noor", "Noor Haddad", "Account lead", "account_lead", "full_time", 15),
-  member("tm-yousef", "Yousef Karim", "Videographer", "creator", "full_time", 20),
-  member("tm-mariam", "Mariam Saleh", "Video editor", "creator", "full_time", 20),
-  member("tm-hamad", "Hamad Rashid", "Designer", "creator", "part_time", 12),
-  member("tm-lina", "Lina Aziz", "Motion designer", "creator", "freelance", 10),
+  member("tm-rand", "Rand", "Account lead", "account_lead", "full_time", 15),
+  member("tm-khaled", "Khaled", "Creator", "creator", "full_time", 20),
+  member("tm-anas", "Anas", "Creator", "creator", "full_time", 20),
+  member("tm-ruba", "Ruba", "Creator", "creator", "part_time", 12),
+  member("tm-busafen", "Busafen", "Creator", "creator", "freelance", 10),
 ];
 
 function member(
@@ -62,15 +64,15 @@ function member(
   employment: TeamMember["employment"],
   weekly_capacity_points: number,
 ): TeamMember {
-  const email = `${full_name.split(" ")[0].toLowerCase()}@example.com`;
+  const email = `${full_name.split(" ")[0].toLowerCase()}@numu.test`;
   return { id, user_id: null, full_name, email, job_title, access_level, employment, weekly_capacity_points, is_active: true };
 }
 
 const CLIENTS: Client[] = [
-  client("cl-dune", "Dune Coffee Roasters", "محمصة الكثبان للقهوة", "Food and beverage", "tm-noor"),
-  client("cl-marina", "Marina Dental Clinic", "عيادة مارينا لطب الأسنان", "Healthcare", "tm-noor"),
+  client("cl-dune", "Dune Coffee Roasters", "محمصة الكثبان للقهوة", "Food and beverage", "tm-rand"),
+  client("cl-marina", "Marina Dental Clinic", "عيادة مارينا لطب الأسنان", "Healthcare", "tm-rand"),
   client("cl-falcon", "Falcon Motors", "فالكون موتورز", "Automotive", "tm-farouk"),
-  client("cl-sidra", "Sidra Interiors", "سدرة للتصميم الداخلي", "Interior design", "tm-noor"),
+  client("cl-sidra", "Sidra Interiors", "سدرة للتصميم الداخلي", "Interior design", "tm-rand"),
   client("cl-sandline", "Sandline Padel", "ساندلاين بادل", "Sports", "tm-farouk"),
 ];
 
@@ -101,23 +103,23 @@ type ScopeSpec = [ScopeLine["deliverable_type"], number, ScopeLine["platform"], 
 const RETAINER_SPECS: { id: string; client: string; monthsAgo: number; fee: number; scope: ScopeSpec[] }[] = [
   {
     id: "rt-dune", client: "cl-dune", monthsAgo: 5, fee: 1_800_000,
-    scope: [["reel", 6, "instagram", "tm-mariam"], ["static_post", 8, "instagram", "tm-hamad"], ["story_set", 4, "instagram", "tm-noor"]],
+    scope: [["reel", 6, "instagram", "tm-anas"], ["static_post", 8, "instagram", "tm-ruba"], ["story_set", 4, "instagram", "tm-rand"]],
   },
   {
     id: "rt-marina", client: "cl-marina", monthsAgo: 4, fee: 1_500_000,
-    scope: [["reel", 4, "instagram", "tm-mariam"], ["carousel", 6, "instagram", "tm-hamad"], ["shoot_day", 1, null, "tm-yousef"]],
+    scope: [["reel", 4, "instagram", "tm-anas"], ["carousel", 6, "instagram", "tm-ruba"], ["shoot_day", 1, null, "tm-khaled"]],
   },
   {
     id: "rt-falcon", client: "cl-falcon", monthsAgo: 8, fee: 3_200_000,
-    scope: [["reel", 8, "instagram", "tm-mariam"], ["reel", 4, "tiktok", "tm-lina"], ["ad_set", 2, "instagram", "tm-hamad"], ["long_video", 1, "youtube", "tm-yousef"]],
+    scope: [["reel", 8, "instagram", "tm-anas"], ["reel", 4, "tiktok", "tm-busafen"], ["ad_set", 2, "instagram", "tm-ruba"], ["long_video", 1, "youtube", "tm-khaled"]],
   },
   {
     id: "rt-sidra", client: "cl-sidra", monthsAgo: 1, fee: 1_200_000,
-    scope: [["carousel", 4, "instagram", "tm-hamad"], ["reel", 3, "instagram", "tm-lina"]],
+    scope: [["carousel", 4, "instagram", "tm-ruba"], ["reel", 3, "instagram", "tm-busafen"]],
   },
   {
     id: "rt-sandline", client: "cl-sandline", monthsAgo: 2, fee: 950_000,
-    scope: [["reel", 4, "tiktok", "tm-lina"], ["static_post", 6, "instagram", "tm-hamad"], ["story_set", 4, "instagram", null]],
+    scope: [["reel", 4, "tiktok", "tm-busafen"], ["static_post", 6, "instagram", "tm-ruba"], ["story_set", 4, "instagram", null]],
   },
 ];
 
@@ -273,10 +275,10 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
     },
   ];
   const projectItems: [string, Deliverable["deliverable_type"], Deliverable["platform"], string, number, DeliverableStatus][] = [
-    ["Teaser reel", "reel", "instagram", "tm-mariam", 2, "editing"],
-    ["Influencer post 1/2", "influencer_post", "instagram", "tm-noor", 9, "scripting"],
-    ["Influencer post 2/2", "influencer_post", "tiktok", "tm-noor", 12, "planned"],
-    ["Campaign film", "long_video", "youtube", "tm-yousef", 18, "shooting"],
+    ["Teaser reel", "reel", "instagram", "tm-anas", 2, "editing"],
+    ["Influencer post 1/2", "influencer_post", "instagram", "tm-rand", 9, "scripting"],
+    ["Influencer post 2/2", "influencer_post", "tiktok", "tm-rand", 12, "planned"],
+    ["Campaign film", "long_video", "youtube", "tm-khaled", 18, "shooting"],
   ];
   projectItems.forEach(([title, type, platform, owner, inDays, status], i) => {
     const t = typeByCode.get(type)!;
@@ -345,12 +347,12 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
   const comments: Comment[] = [];
   if (bounced) {
     comments.push(
-      { id: "cm-1", deliverable_id: bounced.id, author_team_member_id: "tm-noor", author_contact_id: null, body: "Client wants the logo bigger in the first 2 seconds, and the price on screen in Arabic too.", is_internal: true, created_at: new Date(now.getTime() - 26 * 3_600_000).toISOString() },
-      { id: "cm-2", deliverable_id: bounced.id, author_team_member_id: "tm-mariam", author_contact_id: null, body: "On it. New cut on Drive by tomorrow noon.", is_internal: true, created_at: new Date(now.getTime() - 25 * 3_600_000).toISOString() },
+      { id: "cm-1", deliverable_id: bounced.id, author_team_member_id: "tm-rand", author_contact_id: null, body: "Client wants the logo bigger in the first 2 seconds, and the price on screen in Arabic too.", is_internal: true, created_at: new Date(now.getTime() - 26 * 3_600_000).toISOString() },
+      { id: "cm-2", deliverable_id: bounced.id, author_team_member_id: "tm-anas", author_contact_id: null, body: "On it. New cut on Drive by tomorrow noon.", is_internal: true, created_at: new Date(now.getTime() - 25 * 3_600_000).toISOString() },
     );
   }
   if (waiting) {
-    comments.push({ id: "cm-3", deliverable_id: waiting.id, author_team_member_id: "tm-noor", author_contact_id: null, body: "Sent to Dr. Hessa on WhatsApp too. She's travelling until Thursday.", is_internal: true, created_at: new Date(now.getTime() - 50 * 3_600_000).toISOString() });
+    comments.push({ id: "cm-3", deliverable_id: waiting.id, author_team_member_id: "tm-rand", author_contact_id: null, body: "Sent to Dr. Hessa on WhatsApp too. She's travelling until Thursday.", is_internal: true, created_at: new Date(now.getTime() - 50 * 3_600_000).toISOString() });
   }
 
   return {

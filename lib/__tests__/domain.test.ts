@@ -169,13 +169,13 @@ describe("demo data", () => {
   });
 
   it("gives an account lead their work, sign-offs and client waits", () => {
-    const work = myWork(rows, data, "tm-noor", "account_lead", today);
+    const work = myWork(rows, data, "tm-rand", "account_lead", today);
     expect(work.waitingOnClient.length).toBeGreaterThan(0);
     expect(work.week).toHaveLength(7);
     expect(work.week[0].day).toBe(weekStart(today));
-    const creator = myWork(rows, data, "tm-mariam", "creator", today);
+    const creator = myWork(rows, data, "tm-anas", "creator", today);
     expect(creator.signOff).toHaveLength(0);
-    expect(creator.open.every((r) => r.owner_id === "tm-mariam")).toBe(true);
+    expect(creator.open.every((r) => r.owner_id === "tm-anas")).toBe(true);
   });
 
   it("produces pulse numbers", () => {

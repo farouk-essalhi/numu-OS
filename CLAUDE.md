@@ -51,6 +51,8 @@ Later phases (do not build yet): 2 Money (Dec 6–19), 3 Clients in the loop (De
 | `creator` | Everyone making content | See clients, scope and the whole board; move cards; comment. **No fees** |
 | `client` | Approvers at each client | Phase 1: their own client and contact row only. Phase 3: portal |
 
+**Sign-in today (interim, decision 30):** the deployed site requires an email + password (dummy `@numu.test` addresses), checked in `lib/auth/` against the Netlify env vars `NUMU_ACCOUNTS` (salted scrypt hashes, built with `scripts/auth/hash-accounts.mjs`) and `NUMU_SESSION_SECRET`; `proxy.ts` and `app/(app)/layout.tsx` both enforce it. Without those env vars (local dev) sign-in is off and Settings has "View as". Never commit passwords, hashes or the secret. Supabase auth replaces this.
+
 A team member's role is `team_members.access_level`. A client login is a `contacts` row with a `user_id`. There is no separate profiles table. NUMU OS is **invite-only**: a partner adds the person with their email, then invites that email; the login links to the person by email automatically. Signups are off.
 
 Who sees what, table by table: `docs/schema.md`, "Access matrix". Never widen access without a decision line and a test.
@@ -108,7 +110,10 @@ app/(app)/                pages: overview, my-work, approvals, deliverables, cal
 components/shell/         sidebar, top bar, phone tab bar, ⌘K command palette, navigation config
 components/               ui.tsx (primitives), charts.tsx, deliverables.tsx (table, board, stepper), new-deliverable-sheet.tsx
 lib/                      types (mirror the DB), dates (Doha), workflow rules, selectors, insights (dashboard numbers), store
-lib/demo/                 demo data until Supabase exists (fictional)
+lib/demo/                 demo data until Supabase exists (fictional clients; the team's first names)
+lib/auth/, proxy.ts       interim sign-in (session token, password check, route guard)
+app/login/                sign-in page and sign-in/out server actions
+scripts/auth/             hash-accounts.mjs: build NUMU_ACCOUNTS from emails + passwords
 mcp/                      Claude connection (phase 5)
 ```
 
@@ -121,6 +126,9 @@ npm run lint && npm run typecheck && npm run build
 
 # Database tests on any Postgres 15+ with pgTAP (no Docker). Uses PG* env vars.
 scripts/db/test.sh
+
+# Sign-in on Netlify: env vars NUMU_ACCOUNTS (secret) and NUMU_SESSION_SECRET (secret); redeploy after
+# changing them. New passwords: node scripts/auth/hash-accounts.mjs people.json (people.json never committed).
 
 # Deploy: Netlify project "numu-os" (https://numu-os.netlify.app), built by Netlify from
 # netlify.toml (npm run build, publish .next, @netlify/plugin-nextjs). Not connected to Git yet:

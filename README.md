@@ -25,6 +25,10 @@ npm test           # unit tests
 npm run lint && npm run typecheck && npm run build
 ```
 
+## Signing in
+
+The live site needs a team login (email + password). Accounts are set on Netlify (`NUMU_ACCOUNTS`, `NUMU_SESSION_SECRET`); passwords are never stored in this repo. To reset or add people, write a `people.json` outside the repo and run `node scripts/auth/hash-accounts.mjs people.json`, then paste the output into Netlify and redeploy. Running locally without those variables, sign-in is off.
+
 ## Running the database tests
 
 Any Postgres 15+ with [pgTAP](https://pgtap.org) installed, no Docker needed:

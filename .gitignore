@@ -29,3 +29,8 @@ next-env.d.ts
 
 # Temporary archive the Netlify uploader creates (and removes) while deploying
 deploy-*.zip
+
+# Never commit login material (see scripts/auth/hash-accounts.mjs)
+people*.json
+accounts*.json
+session-secret*

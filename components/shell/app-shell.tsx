@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Bell,
   ChevronsLeft,
+  LogOut,
   ChevronsRight,
   Hourglass,
   Menu,
@@ -25,6 +26,7 @@ import { attentionItems } from "@/lib/insights";
 import { ledClientIds, myWork } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import { applyTheme, readTheme } from "@/lib/theme";
+import { signOut } from "@/app/login/actions";
 import { NewDeliverableSheet } from "../new-deliverable-sheet";
 import { Avatar, Button, CountBadge, IconButton, Kbd } from "../ui";
 import { CommandPalette } from "./command-palette";
@@ -34,7 +36,7 @@ const ROLE_LABEL = { partner: "Partner", account_lead: "Account lead", creator: 
 const COLLAPSE_KEY = "numu.sidebar.collapsed";
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { rows, data, me, role, today, isDemo } = useNumu();
+  const { rows, data, me, role, today, isDemo, signedIn } = useNumu();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(() => {
     try {
@@ -108,7 +110,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className={cn("flex min-h-dvh flex-col", collapsed ? "md:pl-[68px]" : "md:pl-[68px] lg:pl-[248px]")}>
         {isDemo ? (
           <div className="border-b border-line bg-surface-2 px-4 py-1.5 text-center text-[12px] text-muted">
-            Demo data: fictional clients and team. Switch roles in Settings.
+            {signedIn ? "Preview: clients and work are fictional demo data until NUMU's real data is entered." : "Demo data: fictional clients. Switch roles in Settings."}
           </div>
         ) : null}
         <TopBar
@@ -152,7 +154,7 @@ function Sidebar({
   collapsed?: boolean;
   onClose?: () => void;
 }) {
-  const { me, role } = useNumu();
+  const { me, role, signedIn } = useNumu();
   const pathname = usePathname();
   // Labels hide on the icon rail.
   const label = compact === "always" ? "hidden" : compact === "below-lg" ? "hidden lg:inline" : "inline";
@@ -265,6 +267,22 @@ function Sidebar({
             <span className="block truncate text-[11.5px] text-muted">{ROLE_LABEL[role]}</span>
           </span>
         </Link>
+        {signedIn ? (
+          <form action={signOut}>
+            <button
+              type="submit"
+              title="Sign out"
+              className={cn(
+                "flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-[12.5px] text-muted hover:bg-surface-3 hover:text-ink",
+                compact === "always" && "justify-center",
+                compact === "below-lg" && "justify-center lg:justify-start",
+              )}
+            >
+              <LogOut className="size-4 shrink-0" />
+              <span className={label}>Sign out</span>
+            </button>
+          </form>
+        ) : null}
         {onToggle ? (
           <button
             type="button"

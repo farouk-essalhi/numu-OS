@@ -38,6 +38,8 @@ interface NumuValue {
   now: Date;
   hour: number;
   isDemo: true;
+  /** True when this person signed in (then "View as" is off). */
+  signedIn: boolean;
   move: (id: string, to: DeliverableStatus) => MoveResult;
   update: (id: string, patch: DeliverablePatch) => void;
   create: (input: NewDeliverableInput) => { ok: true; id: string } | { ok: false; reason: string };
@@ -55,7 +57,7 @@ function readViewAs(): string {
   }
 }
 
-export function NumuProvider({ children }: { children: ReactNode }) {
+export function NumuProvider({ children, sessionMemberId = null }: { children: ReactNode; sessionMemberId?: string | null }) {
   // Everything here depends on today's date in Doha and on this browser
   // (demo data, the "view as" choice), so it renders in the browser only.
   use(browser("NUMU OS renders per person and per day, in the browser."));
@@ -65,7 +67,9 @@ export function NumuProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<Dataset>(() => buildDemoDataset(today, now));
   const [meId, setMeId] = useState(readViewAs);
 
-  const me = data.team.find((m) => m.id === meId) ?? data.team.find((m) => m.id === DEMO_DEFAULT_USER)!;
+  const signedIn = Boolean(sessionMemberId && data.team.some((m) => m.id === sessionMemberId));
+  const me =
+    data.team.find((m) => m.id === (signedIn ? sessionMemberId : meId)) ?? data.team.find((m) => m.id === DEMO_DEFAULT_USER)!;
   const role = me.access_level;
   const rows = useMemo(() => boardRows(data, today, new Date()), [data, today]);
 
@@ -195,6 +199,7 @@ export function NumuProvider({ children }: { children: ReactNode }) {
     now,
     hour: qatarHour(),
     isDemo: true,
+    signedIn,
     move,
     update,
     create,

@@ -1,6 +1,7 @@
 "use client";
 
-import { Monitor, Moon, RotateCcw, Sun } from "lucide-react";
+import { LogOut, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
+import { signOut } from "@/app/login/actions";
 import { useState, type ReactNode } from "react";
 import { Avatar, Button, Card, CardHeader, PageHeader, Pill, Segmented } from "@/components/ui";
 import { useNumu } from "@/lib/store";
@@ -9,7 +10,7 @@ import { applyTheme, readTheme, type Theme } from "@/lib/theme";
 const ROLE_LABEL = { partner: "Partner", account_lead: "Account lead", creator: "Creator" } as const;
 
 export default function SettingsPage() {
-  const { me, role, data, viewAs, isDemo } = useNumu();
+  const { me, role, data, viewAs, isDemo, signedIn } = useNumu();
   const [theme, setTheme] = useState<Theme>(readTheme);
 
   return (
@@ -52,9 +53,22 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        {isDemo ? (
+        {signedIn ? (
           <Card>
-            <CardHeader title="Demo" subtitle="Until sign-in is connected, preview the app as anyone on the team" />
+            <CardHeader title="Account" subtitle={`Signed in as ${me.email}`} />
+            <div className="border-t border-line px-4 py-4 sm:px-5">
+              <form action={signOut}>
+                <Button type="submit">
+                  <LogOut /> Sign out
+                </Button>
+              </form>
+            </div>
+          </Card>
+        ) : null}
+
+        {isDemo && !signedIn ? (
+          <Card>
+            <CardHeader title="Demo" subtitle="Sign-in is off on this copy (local development): preview the app as anyone on the team" />
             <div className="divide-y divide-line border-t border-line">
               <Row label="View as">
                 <select
@@ -89,7 +103,7 @@ export default function SettingsPage() {
         <Card>
           <CardHeader title="About" />
           <p className="border-t border-line px-4 py-4 text-[13px] text-muted sm:px-5">
-            NUMU OS · Phase 0 preview on fictional demo data. Sign-in with team accounts arrives with the Supabase project.
+            NUMU OS · Phase 0 preview. The clients and their work are fictional demo data; real data arrives with the Supabase project.
           </p>
         </Card>
       </div>
