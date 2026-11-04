@@ -115,6 +115,11 @@ function Form({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="scroll-thin flex-1 space-y-4 overflow-y-auto px-5 py-5">
+        {clients.length === 0 ? (
+          <p className="rounded-lg bg-surface-2 px-3 py-2.5 text-[13px] text-muted">
+            Add a client first (Clients → New client), then their retainer or a campaign.
+          </p>
+        ) : null}
         <Field label="Title">
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={fallbackTitle} className={control} />
         </Field>

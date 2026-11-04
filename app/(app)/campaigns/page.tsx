@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
-import { Avatar, Card, Empty, PageHeader, Pill, Progress } from "@/components/ui";
+import { Pencil, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
+import { EditSheet, type Edit } from "@/components/entity-forms";
+import { Avatar, Button, Card, Empty, IconButton, PageHeader, Pill, Progress } from "@/components/ui";
 import { daysBetween, formatShort } from "@/lib/dates";
 import { formatMoney, percent } from "@/lib/format";
 import { useNumu } from "@/lib/store";
@@ -12,13 +14,14 @@ const STATUS_TONE = { planned: "neutral", active: "info", delivered: "good", can
 
 export default function CampaignsPage() {
   const { rows, data, role, today } = useNumu();
+  const [edit, setEdit] = useState<Edit | null>(null);
   const campaigns = useMemo(
     () =>
       data.projects.map((p) => {
         const items = rows.filter((r) => r.project_id === p.id);
         return {
           project: p,
-          client: data.clients.find((c) => c.id === p.client_id)!,
+          client: data.clients.find((c) => c.id === p.client_id) ?? { name_en: "Unknown client" },
           total: items.length,
           done: items.filter((r) => isDone(r.status)).length,
           late: items.filter((r) => r.flags.overdue).length,
@@ -40,17 +43,28 @@ export default function CampaignsPage() {
 
   return (
     <>
-      <PageHeader title="Campaigns" subtitle="One-off projects: a client, a fixed fee, a deliverable list and a deadline" />
+      <PageHeader
+        title="Campaigns"
+        subtitle="One-off projects: a client, a fixed fee, a deliverable list and a deadline"
+        actions={
+          <Button variant="primary" onClick={() => setEdit({ kind: "project" })} disabled={data.clients.length === 0} title={data.clients.length ? undefined : "Add a client first"}>
+            <Plus /> New campaign
+          </Button>
+        }
+      />
+      <EditSheet edit={edit} onClose={() => setEdit(null)} />
       <Card className="overflow-hidden">
-        {campaigns.length === 0 ? <Empty>No campaigns yet.</Empty> : null}
+        {campaigns.length === 0 ? (
+          <Empty>{data.clients.length ? "No campaigns yet. Add one, then add its deliverables with New deliverable." : "Add a client first, then their campaigns."}</Empty>
+        ) : null}
         <ul className="divide-y divide-line">
           {campaigns.map(({ project: p, client, total, done, late }) => {
             const left = p.deadline ? daysBetween(today, p.deadline) : null;
             return (
-              <li key={p.id}>
+              <li key={p.id} className="flex items-center pr-2 hover:bg-surface-2 sm:pr-3">
                 <Link
                   href={`/deliverables?project=${p.id}`}
-                  className="grid gap-3 px-4 py-4 hover:bg-surface-2 sm:px-5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] md:items-center md:gap-6"
+                  className="grid min-w-0 flex-1 gap-3 px-4 py-4 sm:px-5 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto_auto] md:items-center md:gap-6"
                 >
                   <span className="flex min-w-0 items-center gap-3">
                     <Avatar name={client.name_en} size={36} square />
@@ -74,6 +88,9 @@ export default function CampaignsPage() {
                     {p.status}
                   </Pill>
                 </Link>
+                <IconButton label={`Edit ${p.name_en}`} onClick={() => setEdit({ kind: "project", row: p })}>
+                  <Pencil />
+                </IconButton>
               </li>
             );
           })}

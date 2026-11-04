@@ -55,6 +55,7 @@ export interface TeamMember {
   user_id: string | null;
   full_name: string;
   email: string | null;
+  phone: string | null;
   job_title: string | null;
   access_level: AccessLevel;
   employment: EmploymentType;
@@ -93,6 +94,7 @@ export interface Retainer {
   monthly_fee_minor: number;
   currency: string;
   billing_day: number | null;
+  notes: string | null;
 }
 
 export interface ScopeLine {
@@ -102,6 +104,7 @@ export interface ScopeLine {
   quantity_per_month: number;
   platform: Platform | null;
   default_owner_id: string | null;
+  notes: string | null;
 }
 
 export interface Project {
@@ -114,6 +117,7 @@ export interface Project {
   currency: string;
   start_date: IsoDate | null;
   deadline: IsoDate | null;
+  notes: string | null;
 }
 
 export interface Deliverable {

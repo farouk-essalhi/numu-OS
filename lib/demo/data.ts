@@ -65,7 +65,7 @@ function member(
   weekly_capacity_points: number,
 ): TeamMember {
   const email = `${full_name.split(" ")[0].toLowerCase()}@numu.test`;
-  return { id, user_id: null, full_name, email, job_title, access_level, employment, weekly_capacity_points, is_active: true };
+  return { id, user_id: null, full_name, email, phone: null, job_title, access_level, employment, weekly_capacity_points, is_active: true };
 }
 
 const CLIENTS: Client[] = [
@@ -166,6 +166,7 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
       monthly_fee_minor: spec.fee,
       currency: "QAR",
       billing_day: null,
+      notes: null,
     });
     spec.scope.forEach(([type, qty, platform, owner], i) => {
       scopeLines.push({
@@ -175,6 +176,7 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
         quantity_per_month: qty,
         platform,
         default_owner_id: owner,
+        notes: null,
       });
     });
   }
@@ -272,6 +274,7 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
       currency: "QAR",
       start_date: addDays(today, -10),
       deadline: addDays(today, 25),
+      notes: null,
     },
   ];
   const projectItems: [string, Deliverable["deliverable_type"], Deliverable["platform"], string, number, DeliverableStatus][] = [

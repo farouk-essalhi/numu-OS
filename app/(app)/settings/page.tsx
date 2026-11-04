@@ -1,7 +1,6 @@
 "use client";
 
-import { LogOut, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
-import { signOut } from "@/app/login/actions";
+import { Eraser, LogOut, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Avatar, Button, Card, CardHeader, PageHeader, Pill, Segmented } from "@/components/ui";
 import { useNumu } from "@/lib/store";
@@ -10,7 +9,7 @@ import { applyTheme, readTheme, type Theme } from "@/lib/theme";
 const ROLE_LABEL = { partner: "Partner", account_lead: "Account lead", creator: "Creator" } as const;
 
 export default function SettingsPage() {
-  const { me, role, data, viewAs, isDemo, signedIn } = useNumu();
+  const { me, role, data, viewAs, isDemo, signedIn, signOut, clearDemo, notify } = useNumu();
   const [theme, setTheme] = useState<Theme>(readTheme);
 
   return (
@@ -24,12 +23,12 @@ export default function SettingsPage() {
             <div className="min-w-0 flex-1">
               <p className="text-[16px] font-semibold">{me.full_name}</p>
               <p className="text-[13px] text-muted">
-                {me.job_title} · {me.email}
+                {[me.job_title, me.email].filter(Boolean).join(" · ")}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Pill tone="info">{ROLE_LABEL[role]}</Pill>
-              <Pill>{me.weekly_capacity_points} pts / week</Pill>
+              {me.weekly_capacity_points ? <Pill>{me.weekly_capacity_points} pts / week</Pill> : null}
               <Pill className="capitalize">{me.employment.replace("_", " ")}</Pill>
             </div>
           </div>
@@ -57,11 +56,9 @@ export default function SettingsPage() {
           <Card>
             <CardHeader title="Account" subtitle={`Signed in as ${me.email}`} />
             <div className="border-t border-line px-4 py-4 sm:px-5">
-              <form action={signOut}>
-                <Button type="submit">
-                  <LogOut /> Sign out
-                </Button>
-              </form>
+              <Button onClick={() => void signOut()}>
+                <LogOut /> Sign out
+              </Button>
             </div>
           </Card>
         ) : null}
@@ -84,6 +81,16 @@ export default function SettingsPage() {
                   ))}
                 </select>
               </Row>
+              <Row label="Start empty (try entering your own)">
+                <Button
+                  onClick={() => {
+                    clearDemo();
+                    notify("Demo clients and work cleared in this tab. Reset brings them back", "success");
+                  }}
+                >
+                  <Eraser /> Clear
+                </Button>
+              </Row>
               <Row label="Reset demo data">
                 <Button
                   onClick={() => {
@@ -103,7 +110,9 @@ export default function SettingsPage() {
         <Card>
           <CardHeader title="About" />
           <p className="border-t border-line px-4 py-4 text-[13px] text-muted sm:px-5">
-            NUMU OS · Phase 0 preview. The clients and their work are fictional demo data; real data arrives with the Supabase project.
+            {isDemo
+              ? "NUMU OS · local copy on fictional demo data (no Supabase project configured)."
+              : "NUMU OS · Phase 1. Your data lives in NUMU's Supabase project; what you see depends on your role."}
           </p>
         </Card>
       </div>

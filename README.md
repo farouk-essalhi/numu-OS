@@ -9,7 +9,7 @@ NUMU's internal system for retainers, deliverables, client approvals and money. 
 
 ## Status
 
-Phase 0. The Phase 1 database (clients, retainers, scope, projects, deliverables, status history, comments, access rules and the monthly deliverable generator) is drafted and covered by tests. The app's screens run on fictional demo data until the Supabase project exists.
+Phase 0. The Phase 1 database (clients, retainers, scope, projects, deliverables, status history, comments, access rules and the monthly deliverable generator) is tested and live in the `numu-os` Supabase project, empty and ready for NUMU's own clients. The deployed app reads and writes it; locally it runs on fictional demo data.
 
 ## Running the app
 
@@ -18,7 +18,7 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-Works on desktop, tablet and phone. Settings → "View as" switches between a partner, an account lead and a creator to see what each role gets. ⌘K searches everything. Light and dark follow the device, or use the toggle in the top bar.
+Works on desktop, tablet and phone. Without Supabase env vars it runs on demo data: Settings → "View as" switches between a partner, an account lead and a creator, and "Start empty" clears the demo clients to try entering your own. ⌘K searches everything. Light and dark follow the device, or use the toggle in the top bar. To run against Supabase, set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local`.
 
 ```bash
 npm test           # unit tests
@@ -27,7 +27,7 @@ npm run lint && npm run typecheck && npm run build
 
 ## Signing in
 
-The live site needs a team login (email + password). Accounts are set on Netlify (`NUMU_ACCOUNTS`, `NUMU_SESSION_SECRET`); passwords are never stored in this repo. To reset or add people, write a `people.json` outside the repo and run `node scripts/auth/hash-accounts.mjs people.json`, then paste the output into Netlify and redeploy. Running locally without those variables, sign-in is off.
+The live site uses Supabase logins (email + password). To add someone: a partner adds them in Team (with the email they'll sign in with), then creates their login in the Supabase dashboard → Authentication → Users → Add user (same email, a password, "Auto Confirm User" on). To reset a password, use the same screen. Passwords are never stored in this repo. Running locally without the Supabase env vars, sign-in is off.
 
 ## Running the database tests
 

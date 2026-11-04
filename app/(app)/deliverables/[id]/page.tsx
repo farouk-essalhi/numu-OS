@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { ArrowRight, ArrowUp, Check, ChevronRight, ExternalLink, Pencil, RotateCcw } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowRight, ArrowUp, Check, ChevronRight, ExternalLink, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { FlagPills, StatusStepper } from "@/components/deliverables";
 import { Avatar, Button, Card, CardHeader, Empty, Pill, StatusPill } from "@/components/ui";
@@ -115,6 +115,7 @@ export default function DeliverablePage() {
               {STATUS_META[next].en} <ArrowRight />
             </Button>
           ) : null}
+          {role !== "creator" ? <DeleteButton id={row.id} /> : null}
         </div>
       </div>
 
@@ -324,5 +325,30 @@ function LinkRow({ label, url, onSave }: { label: string; url: string | null; on
         </>
       )}
     </li>
+  );
+}
+
+/** Leads and partners can delete planned work they don't need (e.g. trimming a generated month). Asks twice. */
+function DeleteButton({ id }: { id: string }) {
+  const { remove, notify } = useNumu();
+  const router = useRouter();
+  const [sure, setSure] = useState(false);
+  return (
+    <Button
+      variant="ghost"
+      className={sure ? "text-critical hover:text-critical" : "text-muted"}
+      title="Delete this deliverable"
+      aria-label={sure ? "Confirm delete" : "Delete deliverable"}
+      onClick={async () => {
+        if (!sure) return setSure(true);
+        const r = await remove("deliverables", id);
+        if (!r.ok) return notify(r.reason, "error");
+        notify("Deliverable deleted", "success");
+        router.push("/deliverables");
+      }}
+      onBlur={() => setSure(false)}
+    >
+      <Trash2 /> {sure ? "Sure? Delete" : ""}
+    </Button>
   );
 }

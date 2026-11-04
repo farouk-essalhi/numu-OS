@@ -10,12 +10,12 @@ Read before building anything: this file, then `docs/schema.md`. Why things are 
 
 ## Current phase
 
-**Phase 0 (Map and decide), Nov 1–14 2026.** The Phase 1 database is drafted and tested, waiting for sign-off. The app's screens exist on demo data (no backend yet) so the workshop can react to them.
+**Phase 0 (Map and decide), Nov 1–14 2026.** The Phase 1 database is tested and live in the `numu-os` Supabase project (empty, for NUMU's own data). The deployed app reads and writes it; locally, without Supabase env vars, it runs on demo data.
 
 Phase 0 gate (all must be true before Phase 1 starts):
 - [ ] Ali and Farouk have signed off on this spec and `docs/schema.md`
 - [ ] Every active client's retainer scope is written down (types, quantities, fee, billing day). Use `docs/phase-0.md`
-- [ ] Repo, Supabase project and Netlify site exist (Netlify: done, https://numu-os.netlify.app, demo data; Supabase: not yet)
+- [x] Repo, Supabase project and Netlify site exist (Netlify: https://numu-os.netlify.app; Supabase: `numu-os`, ref `cfadsngaimxmgtmfacmi`, Mumbai)
 - [ ] Open questions in `docs/phase-0.md` are answered, and `docs/decisions.md` updated
 
 **Next: Phase 1 (Core production), Nov 15–Dec 5.** Goal: the team runs daily work in NUMU OS instead of ClickUp.
@@ -23,9 +23,11 @@ Phase 0 gate (all must be true before Phase 1 starts):
 - [x] Monthly deliverable generator (database function + pg_cron on the 25th), with tests
 - [x] App shell and design system: responsive sidebar/top bar/tab bar, ⌘K search, notifications, light/dark, installable (PWA manifest)
 - [x] Screens on demo data: Overview dashboard, My work, Approvals, Deliverables (board + list) and deliverable detail, Calendar, Clients and client detail, Campaigns, Capacity, Reports, Settings, New deliverable panel
-- [ ] Connect to Supabase: magic-link login, read/write through RLS (swap `lib/store.tsx`, nothing else)
-- [ ] Clients, contacts, retainers and scope lines: create and edit screens
-- [ ] One-off projects: create and edit (the first real campaign goes in here)
+- [x] Connect to Supabase: email + password login, read/write through RLS (`lib/store.tsx` + `lib/backend.ts`)
+- [x] Clients, contacts, retainers and scope lines: create and edit screens; "Generate {month}" per retainer
+- [x] One-off projects: create and edit (the first real campaign goes in here)
+- [x] Team members: add/edit (partners); board drag and drop by status and by person
+- [ ] Enter every active client, retainer and scope; generate December
 
 Phase 1 gate: all active clients and December deliverables are in the system; the whole team used My work every day for a week; two weeks alongside ClickUp with nothing missing.
 
@@ -51,7 +53,7 @@ Later phases (do not build yet): 2 Money (Dec 6–19), 3 Clients in the loop (De
 | `creator` | Everyone making content | See clients, scope and the whole board; move cards; comment. **No fees** |
 | `client` | Approvers at each client | Phase 1: their own client and contact row only. Phase 3: portal |
 
-**Sign-in today (interim, decision 30):** the deployed site requires an email + password (dummy `@numu.test` addresses), checked in `lib/auth/` against the Netlify env vars `NUMU_ACCOUNTS` (salted scrypt hashes, built with `scripts/auth/hash-accounts.mjs`) and `NUMU_SESSION_SECRET`; `app/(app)/layout.tsx` enforces it for every page. Don't add a `proxy.ts`: Netlify's Next.js plugin (5.16.6) packages it in a way its function upload rejects (deploys fail with HTTP 500). Without those env vars (local dev) sign-in is off and Settings has "View as". Never commit passwords, hashes or the secret. Supabase auth replaces this.
+**Sign-in (decisions 33–35):** Supabase Auth, email + password (dummy `@numu.test` addresses for now). A partner adds the person in Team (app), then creates their login in the Supabase dashboard (Authentication → Users → Add user, auto-confirm) with the same email; the trigger links them. The browser holds the session (`lib/supabase.ts`, publishable key only) and `components/shell/app-root.tsx` sends anyone without one to `/login`; every read and write goes through RLS as that person. Pages are static shells with no data. Don't add a `proxy.ts`: Netlify's Next.js plugin (5.16.6) packages it in a way its function upload rejects (deploys fail with HTTP 500). Without `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (local dev, tests) the app runs on demo data and Settings has "View as". Never commit passwords; the service role key is never used by the app.
 
 A team member's role is `team_members.access_level`. A client login is a `contacts` row with a `user_id`. There is no separate profiles table. NUMU OS is **invite-only**: a partner adds the person with their email, then invites that email; the login links to the person by email automatically. Signups are off.
 
@@ -108,27 +110,29 @@ supabase/tests/           pgTAP tests (generator, workflow, access per role)
 scripts/db/               run migrations + tests on plain Postgres (no Docker)
 app/(app)/                pages: overview, my-work, approvals, deliverables, calendar, clients, campaigns, team, reports, settings
 components/shell/         sidebar, top bar, phone tab bar, ⌘K command palette, navigation config
-components/               ui.tsx (primitives), charts.tsx, deliverables.tsx (table, board, stepper), new-deliverable-sheet.tsx
-lib/                      types (mirror the DB), dates (Doha), workflow rules, selectors, insights (dashboard numbers), store
-lib/demo/                 demo data until Supabase exists (fictional clients; the team's first names)
-lib/auth/                 interim sign-in (session token, password check)
-app/login/                sign-in page and sign-in/out server actions
-scripts/auth/             hash-accounts.mjs: build NUMU_ACCOUNTS from emails + passwords
+components/               ui.tsx (primitives), charts.tsx, deliverables.tsx (table, stepper), board.tsx (drag-and-drop board),
+                          forms.tsx + entity-forms.tsx (sheets to add/edit clients, contacts, retainers, scope, campaigns, team),
+                          new-deliverable-sheet.tsx; shell/app-root.tsx (session guard, live vs demo)
+lib/                      types (mirror the DB), dates (Doha), workflow rules, selectors, insights (dashboard numbers),
+                          store (one API, live or demo), backend (Supabase reads/writes), supabase (browser client),
+                          database.types (generated), generator (demo copy of the monthly generator)
+lib/demo/                 demo data for local dev and tests (fictional clients; the team's first names)
+app/login/                sign-in page (Supabase email + password)
 mcp/                      Claude connection (phase 5)
 ```
 
 ## Commands
 
 ```bash
-npm run dev             # app on http://localhost:3000 (demo data)
+npm run dev             # app on http://localhost:3000 (demo data unless NEXT_PUBLIC_SUPABASE_* are set)
 npm test                # unit tests: dates, workflow rules, selectors, demo data
 npm run lint && npm run typecheck && npm run build
 
 # Database tests on any Postgres 15+ with pgTAP (no Docker). Uses PG* env vars.
 scripts/db/test.sh
 
-# Sign-in on Netlify: env vars NUMU_ACCOUNTS (secret) and NUMU_SESSION_SECRET (secret); redeploy after
-# changing them. New passwords: node scripts/auth/hash-accounts.mjs people.json (people.json never committed).
+# Netlify env: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (public; baked in at build,
+# so redeploy after changing). Logins: Supabase dashboard → Authentication → Users.
 
 # Deploy: Netlify project "numu-os" (https://numu-os.netlify.app), built by Netlify from
 # netlify.toml (npm run build, publish .next, @netlify/plugin-nextjs). Not connected to Git yet:

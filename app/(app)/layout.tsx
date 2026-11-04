@@ -1,29 +1,14 @@
-import { redirect } from "next/navigation";
-import { Suspense, type ReactNode } from "react";
-import { AppShell } from "@/components/shell/app-shell";
+import { Suspense } from "react";
+import { AppRoot } from "@/components/shell/app-root";
 import { ShellSkeleton } from "@/components/shell/skeleton";
-import { currentMemberId } from "@/lib/auth/session";
-import { authConfig } from "@/lib/auth/token";
-import { NumuProvider } from "@/lib/store";
 
-// The signed-in app. It depends on who is looking and on today's date in
-// Doha, so it streams in behind a static skeleton. This is also the sign-in
-// guard: every page lives under this layout, and without a valid session it
-// redirects to /login before any app content is sent.
+// Every page of the app lives under this layout. The static first paint is a
+// skeleton; AppRoot then renders in the browser for this person and today,
+// and sends anyone without a session to /login (see components/shell/app-root).
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <Suspense fallback={<ShellSkeleton />}>
-      <WithSession>{children}</WithSession>
+      <AppRoot>{children}</AppRoot>
     </Suspense>
-  );
-}
-
-async function WithSession({ children }: { children: ReactNode }) {
-  const memberId = await currentMemberId();
-  if (authConfig() && !memberId) redirect("/login");
-  return (
-    <NumuProvider sessionMemberId={memberId}>
-      <AppShell>{children}</AppShell>
-    </NumuProvider>
   );
 }

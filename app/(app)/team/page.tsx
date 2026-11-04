@@ -1,9 +1,10 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { TickMeter } from "@/components/charts";
-import { Avatar, Button, Card, IconButton, PageHeader } from "@/components/ui";
+import { EditSheet, type Edit } from "@/components/entity-forms";
+import { Avatar, Button, Card, CardHeader, Empty, IconButton, PageHeader, Pill } from "@/components/ui";
 import { addDays, dayNumber, formatShort, isWorkingDay, weekdayShort } from "@/lib/dates";
 import { cn, percent } from "@/lib/format";
 import { capacityWeek } from "@/lib/insights";
@@ -11,8 +12,12 @@ import { planningWeek } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 
 /** Sunday planning: who has room this week, day by day. */
+const ROLE_LABEL = { partner: "Partner", account_lead: "Account lead", creator: "Creator" } as const;
+
 export default function TeamPage() {
-  const { rows, data, today } = useNumu();
+  const { rows, data, today, role, isDemo } = useNumu();
+  const [edit, setEdit] = useState<Edit | null>(null);
+  const isPartner = role === "partner";
   const [offset, setOffset] = useState(0);
   const days = useMemo(() => planningWeek(today).days.map((d) => addDays(d, offset * 7)), [today, offset]);
   const cap = useMemo(() => capacityWeek(rows, data, days), [rows, data, days]);
@@ -43,8 +48,14 @@ export default function TeamPage() {
         }
       />
 
+      <EditSheet edit={edit} onClose={() => setEdit(null)} />
       <Card className="overflow-hidden">
-        <div className="scroll-thin hidden overflow-x-auto md:block">
+        {cap.length === 0 ? (
+          <Empty>
+            Nobody has a weekly capacity yet. {isPartner ? "Set each person's points a week below." : "Partners set it in Team below."}
+          </Empty>
+        ) : null}
+        <div className={cn("scroll-thin hidden overflow-x-auto", cap.length && "md:block")}>
           <table className="w-full min-w-[880px] text-[13px]">
             <thead className="border-b border-line bg-surface-2 text-[12px] text-muted">
               <tr>
@@ -128,6 +139,47 @@ export default function TeamPage() {
         <p className="border-t border-line px-4 py-2.5 text-[12px] text-muted sm:px-5">
           Points come from each deliverable&apos;s type (Reel 3, Static 1…) on its due date. Partners aren&apos;t counted. Weekend shaded.
         </p>
+      </Card>
+
+      <Card className="mt-4 overflow-hidden">
+        <CardHeader
+          title="Team"
+          subtitle={isPartner ? "Who's in NUMU OS, their role and weekly capacity" : "Partners manage the team"}
+          action={
+            isPartner ? (
+              <Button size="sm" variant="primary" onClick={() => setEdit({ kind: "member" })}>
+                <Plus /> Add person
+              </Button>
+            ) : null
+          }
+        />
+        <ul className="divide-y divide-line border-t border-line">
+          {[...data.team]
+            .sort((a, b) => Number(b.is_active) - Number(a.is_active) || a.full_name.localeCompare(b.full_name))
+            .map((m) => (
+              <li key={m.id} className={cn("flex items-center gap-3 px-4 py-3 sm:px-5", !m.is_active && "opacity-60")}>
+                <Avatar name={m.full_name} size={34} />
+                <div className="min-w-0 flex-1">
+                  <p className="flex flex-wrap items-center gap-2 text-[13.5px] font-medium">
+                    {m.full_name}
+                    <Pill tone={m.access_level === "creator" ? "neutral" : "info"}>{ROLE_LABEL[m.access_level]}</Pill>
+                    {!m.is_active ? <Pill>Inactive</Pill> : null}
+                  </p>
+                  <p className="truncate text-[12px] text-muted">
+                    {[m.job_title, m.email, isDemo ? null : m.user_id ? "can sign in" : "no login yet"].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                <span className="hidden text-right text-[12.5px] text-muted sm:block num">
+                  {m.weekly_capacity_points ? `${m.weekly_capacity_points} pts / week` : "capacity not set"}
+                </span>
+                {isPartner ? (
+                  <IconButton label={`Edit ${m.full_name}`} onClick={() => setEdit({ kind: "member", row: m })}>
+                    <Pencil />
+                  </IconButton>
+                ) : null}
+              </li>
+            ))}
+        </ul>
       </Card>
     </>
   );

@@ -1,22 +1,25 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, Columns3, List, Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
-import { DeliverableTable, KanbanBoard, type BoardColumn } from "@/components/deliverables";
-import { Button, Card, IconButton, PageHeader, Segmented, SelectFilter } from "@/components/ui";
+import { useCallback, useMemo, useState } from "react";
+import { KanbanBoard, type BoardColumn, type DropCheck } from "@/components/board";
+import { DeliverableTable } from "@/components/deliverables";
+import { Button, ButtonLink, Card, Empty, IconButton, PageHeader, Segmented, SelectFilter } from "@/components/ui";
 import { addMonths, formatMonth, monthStart } from "@/lib/dates";
 import { useMediaQuery } from "@/lib/hooks";
 import { planningWeek } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import type { DeliverableStatus } from "@/lib/types";
-import { isWithTeam, STATUSES, STATUS_META } from "@/lib/workflow";
+import type { BoardRow } from "@/lib/selectors";
+import { canMove, isWithTeam, STATUSES, STATUS_META } from "@/lib/workflow";
 
 type View = "board" | "list";
 type Group = "status" | "client" | "person";
 
 export default function DeliverablesPage() {
-  const { rows, data, me, today } = useNumu();
+  const { rows, data, me, role, today, move, update } = useNumu();
   const params = useSearchParams();
   const router = useRouter();
   const desktop = useMediaQuery("(min-width: 768px)");
@@ -59,21 +62,51 @@ export default function DeliverablesPage() {
 
   const columns: BoardColumn[] = useMemo(() => {
     if (group === "status") {
-      return STATUSES.filter((s) => !status || s === status)
-        .map((s) => ({ key: s, title: STATUS_META[s].en, color: STATUS_META[s].color, rows: visible.filter((r) => r.status === s) }))
-        .filter((c) => c.rows.length > 0 || ["planned", "editing", "internal_review", "client_review"].includes(c.key));
+      // Every status is a column (empty ones fold into a slim rail), so any
+      // card can be dragged to any step.
+      return STATUSES.filter((s) => !status || s === status).map((s) => ({
+        key: s,
+        title: STATUS_META[s].en,
+        color: STATUS_META[s].color,
+        rows: visible.filter((r) => r.status === s),
+      }));
     }
     if (group === "client") {
       return data.clients
         .map((c) => ({ key: c.id, title: c.name_en, rows: visible.filter((r) => r.client_id === c.id) }))
         .filter((c) => c.rows.length > 0);
     }
+    // Everyone active is a column, so work can be dragged onto anyone.
     const people: BoardColumn[] = data.team
+      .filter((m) => m.is_active || visible.some((r) => r.owner_id === m.id))
       .map((m) => ({ key: m.id, title: m.full_name, avatar: m.full_name, rows: visible.filter((r) => r.owner_id === m.id) }))
-      .filter((c) => c.rows.length > 0);
-    const none = visible.filter((r) => !r.owner_id);
-    return none.length ? [...people, { key: "none", title: "Unassigned", rows: none }] : people;
+      .sort((a, b) => b.rows.length - a.rows.length || a.title.localeCompare(b.title));
+    return [...people, { key: "none", title: "Unassigned", rows: visible.filter((r) => !r.owner_id) }];
   }, [group, visible, data, status]);
+
+  // Dragging a card: by status moves it along (same rules as the database),
+  // by person reassigns it. By client there's nothing to drag to.
+  const canDrop = useCallback(
+    (row: BoardRow, to: string): DropCheck => {
+      if (group === "person") return { ok: true };
+      const check = canMove(role, row.status, to as DeliverableStatus);
+      if (!check.ok) return check;
+      if (to === "scheduled" && !row.post_date) return { ok: false, reason: "Set a post date first: open the card and add it" };
+      return { ok: true };
+    },
+    [group, role],
+  );
+  const onDrop = useCallback(
+    (row: BoardRow, to: string): DropCheck => {
+      if (group === "person") {
+        update(row.id, { owner_id: to === "none" ? null : to });
+        return { ok: true };
+      }
+      const r = move(row.id, to as DeliverableStatus);
+      return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+    },
+    [group, move, update],
+  );
 
   const filtered = Boolean(q || client || owner || type || status || project);
   function clearAll() {
@@ -170,8 +203,44 @@ export default function DeliverablesPage() {
         ) : null}
       </div>
 
-      {view === "board" ? (
-        <KanbanBoard columns={columns} today={today} hideClient={group === "client"} />
+      {visible.length === 0 && !filtered ? (
+        <Card>
+          <Empty className="py-14">
+            <span className="block text-[15px] font-medium text-ink">Nothing in {formatMonth(month)} yet</span>
+            <span className="mt-1 block">
+              {data.clients.length === 0
+                ? "Start by adding your clients, their retainers and what each buys a month."
+                : role === "creator"
+                  ? "Your account lead plans the month; it shows up here."
+                  : "Open a client and generate the month from their scope, or add a deliverable by hand."}
+            </span>
+            {role !== "creator" ? (
+              <ButtonLink href="/clients" variant="primary" className="mt-4">
+                {data.clients.length === 0 ? "Add a client" : "Go to clients"}
+              </ButtonLink>
+            ) : null}
+          </Empty>
+        </Card>
+      ) : view === "board" ? (
+        <>
+          <KanbanBoard
+            columns={columns}
+            today={today}
+            hideClient={group === "client"}
+            collapseEmpty={group !== "client"}
+            canDrop={group === "client" ? undefined : canDrop}
+            onDrop={onDrop}
+          />
+          {group !== "client" ? (
+            <p className="mt-1 hidden text-[12px] text-muted md:block">
+              Drag a card to {group === "status" ? "move it to another step" : "give it to someone else"}. On a phone, press and hold to pick it up.{" "}
+              <Link href="/approvals" className="underline-offset-2 hover:underline">
+                Sign-off rules
+              </Link>{" "}
+              still apply.
+            </p>
+          ) : null}
+        </>
       ) : (
         <Card className="overflow-hidden">
           <DeliverableTable rows={visible} today={today} empty="No deliverables match these filters." />

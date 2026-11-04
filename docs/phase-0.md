@@ -1,6 +1,6 @@
 # Phase 0: Map and decide (Nov 1–14, 2026)
 
-Goal: agree on exactly what we're building before the app gets written. The Phase 1 database is already drafted and tested so the workshop can react to something concrete; nothing has been applied to a real Supabase project.
+Goal: agree on exactly what we're building before the app gets written. The Phase 1 database is drafted, tested and applied to the `numu-os` Supabase project (empty, waiting for real clients) so the workshop can react to something concrete.
 
 > **Real client data does not go in this repo.** Fill in the templates below in a copy on Google Drive. The repo only holds the blank templates and fictional seed data.
 
@@ -74,15 +74,16 @@ GitHub
 - [ ] Give Ali admin access.
 
 Supabase
-- [ ] Create the project (region closest to Doha that Supabase offers; check latency from Doha). Free tier to start, Pro ($25/month, daily backups) once live.
-- [ ] Authentication: turn **off** "Allow new users to sign up"; keep email (magic link) on; set the Site URL and redirect URLs to the Netlify site once it exists.
-- [ ] After spec sign-off: `supabase link --project-ref <ref>` then `supabase db push` to apply the migrations. Don't run `seed.sql` on the real project.
-- [ ] Check pg_cron is on (Integrations → Cron) and the job `numu-generate-next-month` is listed.
-- [ ] Add Farouk and Ali as team members (partner) and invite them.
+- [x] Create the project: `numu-os` (ref `cfadsngaimxmgtmfacmi`), Mumbai (ap-south-1, the closest region to Doha), free tier. Move to Pro ($25/month, daily backups) once the team relies on it.
+- [x] Apply the six migrations (no seed: the real project starts empty). pg_cron job `numu-generate-next-month` is scheduled.
+- [x] Add the seven team members (`<name>@numu.test`; Farouk and Ali partners, Rand account lead, the rest creators, capacity not set).
+- [ ] Authentication → Users → Add user → Create new user, once per person: their `@numu.test` email, a password, "Auto Confirm User" on. The login links to the team member by email.
+- [ ] Authentication → Sign In / Providers: turn **off** "Allow new users to sign up".
+- [ ] Authentication → URL Configuration: Site URL `https://numu-os.netlify.app` (needed once real emails and password resets are used).
 
 Netlify
-- [ ] Create the site from this repo once the Next.js app exists (start of Phase 1).
-- [ ] Environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` (or publishable key). Server-only secrets (service role key) never use the `NEXT_PUBLIC_` prefix.
+- [x] Site `numu-os` (https://numu-os.netlify.app), deployed by upload (not connected to Git yet).
+- [x] Environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (public by design; RLS protects the data). Server-only secrets (service role key) never use the `NEXT_PUBLIC_` prefix, and the app doesn't need one.
 
 ## 6. Backlog (Phase 6 and later)
 

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Avatar, Card, PageHeader, Pill, Progress, TONE_ICON } from "@/components/ui";
+import { EditSheet, type Edit } from "@/components/entity-forms";
+import { Avatar, Button, Card, Empty, PageHeader, Pill, Progress, TONE_ICON } from "@/components/ui";
 import { formatMonth, formatRelative } from "@/lib/dates";
 import { firstName, formatMoney, percent } from "@/lib/format";
 import { clientSummaries, HEALTH_META, type Health } from "@/lib/insights";
@@ -18,13 +19,16 @@ export default function ClientsPage() {
   const all = useMemo(() => clientSummaries(rows, data, thisMonth, today), [rows, data, thisMonth, today]);
   const list = all.filter((c) => !q || c.client.name_en.toLowerCase().includes(q.toLowerCase()) || (c.client.name_ar ?? "").includes(q));
   const counts = (h: Health) => all.filter((c) => c.health === h).length;
+  const [edit, setEdit] = useState<Edit | null>(null);
+  const active = data.clients.filter((c) => c.status === "active").length;
 
   return (
     <>
       <PageHeader
         title="Clients"
-        subtitle={`${all.length} active clients · ${formatMonth(thisMonth)}`}
+        subtitle={`${active} active ${active === 1 ? "client" : "clients"} · ${formatMonth(thisMonth)}`}
         actions={
+          <>
           <label className="flex h-9 w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 shadow-sm sm:w-[240px]">
             <Search className="size-4 text-muted" />
             <input
@@ -35,8 +39,15 @@ export default function ClientsPage() {
               className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted"
             />
           </label>
+          {seesFees ? (
+            <Button variant="primary" onClick={() => setEdit({ kind: "client" })}>
+              <Plus /> New client
+            </Button>
+          ) : null}
+          </>
         }
       />
+      <EditSheet edit={edit} onClose={() => setEdit(null)} />
 
       <div className="mb-4 grid grid-cols-3 gap-3">
         {(["on_track", "at_risk", "behind"] as Health[]).map((h) => (
@@ -50,7 +61,21 @@ export default function ClientsPage() {
       </div>
 
       <Card className="overflow-hidden">
-        <div className="scroll-thin hidden overflow-x-auto md:block">
+        {all.length === 0 ? (
+          <Empty className="py-14">
+            <span className="block text-[15px] font-medium text-ink">No clients yet</span>
+            <span className="mt-1 block">
+              {seesFees ? "Add your first client, then their retainer and what it buys each month." : "Partners and account leads add clients."}
+            </span>
+            {seesFees ? (
+              <Button variant="primary" className="mt-4" onClick={() => setEdit({ kind: "client" })}>
+                <Plus /> Add a client
+              </Button>
+            ) : null}
+          </Empty>
+        ) : null}
+        {list.length === 0 && all.length > 0 ? <Empty>No client matches “{q}”.</Empty> : null}
+        <div className={all.length ? "scroll-thin hidden overflow-x-auto md:block" : "hidden"}>
           <table className="w-full min-w-[820px] text-[13px]">
             <thead className="border-b border-line bg-surface-2 text-left text-[12px] text-muted">
               <tr>
@@ -73,6 +98,7 @@ export default function ClientsPage() {
                       <span className="min-w-0">
                         <Link href={`/clients/${c.client.id}`} onClick={(e) => e.stopPropagation()} className="block truncate font-medium hover:underline">
                           {c.client.name_en}
+                          {c.client.status !== "active" ? <span className="ml-2 text-[11.5px] font-normal text-muted capitalize">{c.client.status}</span> : null}
                         </Link>
                         <span lang="ar" dir="rtl" className="block truncate text-left text-[12px] text-muted">
                           {c.client.name_ar}
