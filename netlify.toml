@@ -6,3 +6,7 @@
 
 [build.environment]
   NODE_VERSION = "22"
+
+# Declared explicitly so it always runs (not version-pinned; Netlify keeps it current).
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
