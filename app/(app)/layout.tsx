@@ -7,7 +7,9 @@ import { authConfig } from "@/lib/auth/token";
 import { NumuProvider } from "@/lib/store";
 
 // The signed-in app. It depends on who is looking and on today's date in
-// Doha, so it streams in behind a static skeleton.
+// Doha, so it streams in behind a static skeleton. This is also the sign-in
+// guard: every page lives under this layout, and without a valid session it
+// redirects to /login before any app content is sent.
 export default function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <Suspense fallback={<ShellSkeleton />}>
