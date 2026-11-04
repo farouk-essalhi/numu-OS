@@ -50,7 +50,7 @@ Later phases (do not build yet): 2 Money (Dec 6–19), 3 Clients in the loop (De
 | Role | Who | Can |
 | --- | --- | --- |
 | `partner` | Farouk, Ali | Everything, incl. finance, team and fees |
-| `account_lead` | Runs client accounts | Clients, contacts, retainers, scope, projects, planning, sign-off. No finance tables (phase 2) |
+| `account_lead` | Runs client accounts | Clients, contacts, retainers, scope, projects, planning, sending work to clients. No finance tables (phase 2) |
 | `creator` | Everyone making content | See clients, scope and the whole board; move cards; comment. **No fees** |
 | `client` | Approvers at each client | Phase 1: their own client and contact row only. Phase 3: portal |
 
@@ -70,7 +70,7 @@ Reel 3 · Static post 1 · Carousel 2 · Story set 1 · Long video 5 · Shoot da
 **Tasks** (decision 39): not all work is content. Follow-ups, reports, content calendars, meetings and other tasks are rows in the same `deliverables` table with a non-content type (`deliverable_types.is_content = false`): they are Planned (to do) or **Done** (a tenth status, tasks only), can belong to just a client, and stay out of content metrics. In the app everything is a "task" ("New task", the Tasks board); content tasks are "deliverables". Recurring tasks are scope lines (e.g. 1 Report a month, `due_day` 3), generated with the month.
 
 Rules, enforced in the database (not just the UI):
-- Only partners and account leads move work **into or out of Client review**, or **into Approved**.
+- **Permissions per person** (decision 43, Team → Permissions, partners edit): `can_approve` marks work **Approved** (default partners); `can_send_to_client` moves work **into or out of Client review** (default partners and account leads); `can_create_tasks` adds and assigns work (default everyone). Checked by the workflow trigger and RLS, mirrored in `canMove()`.
 - **Client review → any earlier status = revision +1.** Nobody edits `revision_count` by hand.
 - **Scheduled needs a post date.** Marking **Posted** stamps `posted_at`.
 - Every status change writes a `status_events` row (trigger only, the app never writes history).

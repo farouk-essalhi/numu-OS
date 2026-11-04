@@ -89,12 +89,12 @@ export default function DeliverablesPage() {
   const canDrop = useCallback(
     (row: BoardRow, to: string): DropCheck => {
       if (group === "person") return { ok: true };
-      const check = canMove(role, row.status, to as DeliverableStatus, row.deliverable_type);
+      const check = canMove(me, row.status, to as DeliverableStatus, row.deliverable_type);
       if (!check.ok) return check;
       if (to === "scheduled" && !row.post_date) return { ok: false, reason: "Set a post date first: open the card and add it" };
       return { ok: true };
     },
-    [group, role],
+    [group, me],
   );
   const onDrop = useCallback(
     (row: BoardRow, to: string): DropCheck => {

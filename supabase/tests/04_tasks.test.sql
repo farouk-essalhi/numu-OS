@@ -124,14 +124,13 @@ select throws_ok(
 select pg_temp.logout();
 
 -- ---------------------------------------------------------------------------
--- Creators still can't plan work
+-- Creators add their own tasks
 -- ---------------------------------------------------------------------------
 select pg_temp.login('aaaaaaaa-4000-4000-8000-000000000002');
-select throws_ok(
+select lives_ok(
   $$ insert into public.deliverables (client_id, deliverable_type, title, month, due_date, effort_points)
      values ('cccccccc-4000-4000-8000-000000000001', 'follow_up', 'Mine', '2026-11-01', '2026-11-10', 1) $$,
-  '42501', null,
-  'creators don''t add tasks (leads and partners plan)'
+  'creators add tasks too (default permission)'
 );
 select pg_temp.logout();
 

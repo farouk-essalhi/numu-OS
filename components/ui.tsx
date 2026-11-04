@@ -269,6 +269,42 @@ export function Avatar({ name, size = 24, className, square }: { name: string; s
 // Controls
 // ---------------------------------------------------------------------------
 
+/** An on/off switch (ink when on). */
+export function Switch({
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-45",
+        checked ? "bg-primary" : "bg-line-strong",
+      )}
+    >
+      <span
+        className={cn(
+          "absolute left-[3px] size-4 rounded-full shadow-sm transition-transform duration-200 ease-[cubic-bezier(0.3,1.4,0.5,1)]",
+          checked ? "translate-x-4 bg-primary-ink" : "bg-surface",
+        )}
+      />
+    </button>
+  );
+}
+
 export function Tabs<T extends string>({
   tabs,
   value,

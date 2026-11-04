@@ -93,22 +93,31 @@ const base: Deliverable = {
 };
 
 describe("workflow rules (same as the database trigger)", () => {
-  it("only partners and account leads sign off", () => {
-    expect(canMove("creator", "editing", "internal_review").ok).toBe(true);
-    expect(canMove("creator", "internal_review", "client_review").ok).toBe(false);
-    expect(canMove("creator", "client_review", "editing").ok).toBe(false);
-    expect(canMove("creator", "approved", "scheduled").ok).toBe(true);
-    expect(canMove("account_lead", "internal_review", "client_review").ok).toBe(true);
-    expect(canMove("partner", "client_review", "approved").ok).toBe(true);
+  // Role defaults: partners approve; partners and leads send to clients.
+  const creatorP = { can_approve: false, can_send_to_client: false };
+  const leadP = { can_approve: false, can_send_to_client: true };
+  const partnerP = { can_approve: true, can_send_to_client: true };
+
+  it("approving and client review follow each person's permissions", () => {
+    expect(canMove(creatorP, "editing", "internal_review").ok).toBe(true);
+    expect(canMove(creatorP, "internal_review", "client_review").ok).toBe(false);
+    expect(canMove(creatorP, "client_review", "editing").ok).toBe(false);
+    expect(canMove(creatorP, "approved", "scheduled").ok).toBe(true);
+    expect(canMove(leadP, "internal_review", "client_review").ok).toBe(true);
+    expect(canMove(leadP, "client_review", "editing").ok).toBe(true);
+    expect(canMove(leadP, "client_review", "approved").ok).toBe(false); // only approvers
+    expect(canMove(partnerP, "client_review", "approved").ok).toBe(true);
+    // An approver without "send to client" can still approve from Client review.
+    expect(canMove({ can_approve: true, can_send_to_client: false }, "client_review", "approved").ok).toBe(true);
     // Tasks are to do or done; content never uses Done.
-    expect(canMove("creator", "planned", "done", "follow_up").ok).toBe(true);
-    expect(canMove("creator", "done", "planned", "report").ok).toBe(true);
-    expect(canMove("partner", "planned", "editing", "content_calendar").ok).toBe(false);
-    expect(canMove("partner", "posted", "done", "reel").ok).toBe(false);
+    expect(canMove(creatorP, "planned", "done", "follow_up").ok).toBe(true);
+    expect(canMove(creatorP, "done", "planned", "report").ok).toBe(true);
+    expect(canMove(partnerP, "planned", "editing", "content_calendar").ok).toBe(false);
+    expect(canMove(partnerP, "posted", "done", "reel").ok).toBe(false);
   });
 
   it("counts a revision when work comes back from the client", () => {
-    const lead = { teamMemberId: "m2", role: "account_lead" as const };
+    const lead = { teamMemberId: "m2", perms: partnerP };
     const r = applyMove({ ...base, status: "client_review" }, "editing", lead);
     expect(r.ok && r.deliverable.revision_count).toBe(1);
     const internal = applyMove({ ...base, status: "internal_review" }, "editing", lead);
@@ -118,7 +127,7 @@ describe("workflow rules (same as the database trigger)", () => {
   });
 
   it("needs a post date to schedule, and stamps posted_at", () => {
-    const creator = { teamMemberId: "m1", role: "creator" as const };
+    const creator = { teamMemberId: "m1", perms: creatorP };
     expect(applyMove({ ...base, status: "approved" }, "scheduled", creator).ok).toBe(false);
     const scheduled = applyMove({ ...base, status: "approved", post_date: "2026-11-12" }, "scheduled", creator);
     expect(scheduled.ok).toBe(true);

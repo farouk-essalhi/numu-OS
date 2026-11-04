@@ -47,7 +47,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [drawer, setDrawer] = useState(false);
   const [palette, setPalette] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
-  const canCreate = role !== "creator";
+  const canCreate = me.can_create_tasks;
 
   const work = useMemo(() => myWork(rows, data, me.id, role, today), [rows, data, me.id, role, today]);
   const badges: Record<BadgeKey, number> = {

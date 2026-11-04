@@ -2,7 +2,7 @@
 -- This is the "log in as each role" gate check, automated.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(47);
+select plan(48);
 
 create function pg_temp.login(p_user uuid) returns void language plpgsql as $$
 begin
@@ -126,11 +126,22 @@ select is_empty($$ select 1 from public.retainers $$, 'creator: cannot see retai
 select is_empty($$ select 1 from public.projects $$,  'creator: cannot see projects (fees)');
 select isnt_empty($$ select 1 from public.comments where id = '77777777-2000-4000-8000-000000000001' $$,
   'creator: sees internal comments');
-select throws_ok(
-  $$ insert into public.deliverables (retainer_id, deliverable_type, title, due_date)
-     values ('dddddddd-2000-4000-8000-000000000001', 'reel', 'Extra', '2031-03-10') $$,
-  '42501', null, 'creator: cannot add deliverables'
+select lives_ok(
+  $$ insert into public.deliverables (client_id, deliverable_type, title, due_date)
+     values ('cccccccc-2000-4000-8000-000000000001', 'follow_up', 'Call about the shoot', '2031-03-10') $$,
+  'creator: can add a task (everyone may create tasks by default)'
 );
+select pg_temp.logout();
+update public.team_members set can_create_tasks = false where id = 'bbbbbbbb-2000-4000-8000-000000000003';
+select pg_temp.login('aaaaaaaa-2000-4000-8000-000000000003');
+select throws_ok(
+  $$ insert into public.deliverables (client_id, deliverable_type, title, due_date)
+     values ('cccccccc-2000-4000-8000-000000000001', 'follow_up', 'Another call', '2031-03-10') $$,
+  '42501', null, 'creator: without "create tasks", cannot add work'
+);
+select pg_temp.logout();
+update public.team_members set can_create_tasks = true where id = 'bbbbbbbb-2000-4000-8000-000000000003';
+select pg_temp.login('aaaaaaaa-2000-4000-8000-000000000003');
 select lives_ok(
   $$ update public.deliverables set status = 'editing' where retainer_id = 'dddddddd-2000-4000-8000-000000000001' and seq = 1 $$,
   'creator: can move a card'

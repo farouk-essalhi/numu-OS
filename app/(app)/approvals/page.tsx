@@ -33,7 +33,13 @@ export default function ApprovalsPage() {
     <>
       <PageHeader
         title="Approvals"
-        subtitle={isLead ? "Sign off internal reviews, then chase client approvals." : "Your work in review. Partners and account leads sign off."}
+        subtitle={
+          isLead
+            ? me.can_approve
+              ? "Send internal reviews to the client, then record their answer."
+              : "Send internal reviews to the client and record changes. Approving is for people a partner allows."
+            : "Your work in review."
+        }
       />
 
       <div className="grid gap-4 xl:grid-cols-2">
@@ -60,7 +66,7 @@ export default function ApprovalsPage() {
                         <Button size="sm" onClick={() => act(r, "editing")}>
                           <RotateCcw /> Back to editing
                         </Button>
-                        <Button size="sm" variant="primary" onClick={() => act(r, "client_review")}>
+                        <Button size="sm" variant="primary" onClick={() => act(r, "client_review")} disabled={!me.can_send_to_client} title={me.can_send_to_client ? undefined : "Sending to the client needs permission"}>
                           <Send /> Send to client
                         </Button>
                       </>
@@ -97,10 +103,10 @@ export default function ApprovalsPage() {
                       </Pill>
                       {isLead ? (
                         <>
-                          <Button size="sm" onClick={() => act(r, "editing")} title="Client asked for changes (counts a revision)">
+                          <Button size="sm" onClick={() => act(r, "editing")} title="Client asked for changes (counts a revision)" disabled={!me.can_send_to_client}>
                             <RotateCcw /> Changes
                           </Button>
-                          <Button size="sm" variant="primary" onClick={() => act(r, "approved")}>
+                          <Button size="sm" variant="primary" onClick={() => act(r, "approved")} disabled={!me.can_approve} title={me.can_approve ? undefined : "Only people allowed to approve (Team → Permissions)"}>
                             <Check /> Approved
                           </Button>
                         </>

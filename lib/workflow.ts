@@ -4,7 +4,6 @@
 
 import { daysBetween, qatarDate } from "./dates";
 import type {
-  AccessLevel,
   Deliverable,
   DeliverableStatus,
   DeliverableTypeCode,
@@ -95,12 +94,16 @@ export function nextStatus(type: DeliverableTypeCode, current: DeliverableStatus
 
 export type MoveCheck = { ok: true } | { ok: false; reason: string };
 
+/** What a person may do with work (team_members permissions). */
+export type Perms = { can_approve: boolean; can_send_to_client: boolean };
+
 /**
  * Who may make a move, and where a type can go. Same rules as
  * private.deliverable_workflow(): tasks are to do or done; content never uses
- * Done; only partners and account leads sign off.
+ * Done; Approved needs "approve"; in or out of Client review needs "send to
+ * client" (both set per person by partners).
  */
-export function canMove(role: AccessLevel, from: DeliverableStatus, to: DeliverableStatus, type?: DeliverableTypeCode): MoveCheck {
+export function canMove(who: Perms, from: DeliverableStatus, to: DeliverableStatus, type?: DeliverableTypeCode): MoveCheck {
   if (from === to) return { ok: false, reason: "Already there" };
   if (type && isTaskType(type) && to !== "planned" && to !== "done") {
     return { ok: false, reason: "A task is either to do or done" };
@@ -108,9 +111,10 @@ export function canMove(role: AccessLevel, from: DeliverableStatus, to: Delivera
   if (type && !isTaskType(type) && to === "done") {
     return { ok: false, reason: "Content goes through review and ends at Posted" };
   }
-  const signOff = to === "client_review" || to === "approved" || from === "client_review";
-  if (signOff && role === "creator") {
-    return { ok: false, reason: "Partners and account leads sign off" };
+  if (to === "approved") {
+    if (!who.can_approve) return { ok: false, reason: "Approving needs permission (Team → Permissions)" };
+  } else if ((to === "client_review" || from === "client_review") && !who.can_send_to_client) {
+    return { ok: false, reason: "Sending to the client needs permission (Team → Permissions)" };
   }
   return { ok: true };
 }
@@ -123,10 +127,10 @@ export type MoveResult =
 export function applyMove(
   d: Deliverable,
   to: DeliverableStatus,
-  actor: { teamMemberId: string; role: AccessLevel },
+  actor: { teamMemberId: string; perms: Perms },
   now: Date = new Date(),
 ): MoveResult {
-  const check = canMove(actor.role, d.status, to, d.deliverable_type);
+  const check = canMove(actor.perms, d.status, to, d.deliverable_type);
   if (!check.ok) return check;
   if (to === "scheduled" && !d.post_date) {
     return { ok: false, reason: "Set a post date before scheduling" };

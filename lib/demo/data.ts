@@ -72,7 +72,13 @@ function member(
   weekly_capacity_points: number,
 ): TeamMember {
   const email = `${full_name.split(" ")[0].toLowerCase()}@numu.test`;
-  return { id, user_id: null, full_name, email, phone: null, job_title, access_level, employment, weekly_capacity_points, is_active: true };
+  return {
+    id, user_id: null, full_name, email, phone: null, job_title, access_level, employment, weekly_capacity_points, is_active: true,
+    // Same defaults as the database: partners approve; partners and leads send to clients; everyone adds tasks.
+    can_create_tasks: true,
+    can_send_to_client: access_level !== "creator",
+    can_approve: access_level === "partner",
+  };
 }
 
 const CLIENTS: Client[] = [

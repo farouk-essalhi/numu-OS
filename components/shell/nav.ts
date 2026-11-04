@@ -48,7 +48,7 @@ export const NAV: { title?: string; items: NavItem[] }[] = [
   {
     title: "Team",
     items: [
-      { href: "/team", label: "Capacity", icon: Users },
+      { href: "/team", label: "Team", icon: Users },
       { href: "/reports", label: "Reports", icon: BarChart3 },
     ],
   },

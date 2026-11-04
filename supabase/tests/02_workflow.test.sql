@@ -2,7 +2,7 @@
 -- sign-off rules, Scheduled/Posted rules, comment authors, login linking.
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(29);
+select plan(30);
 
 create function pg_temp.login(p_user uuid) returns void language plpgsql as $$
 begin
@@ -161,7 +161,7 @@ select pg_temp.login('aaaaaaaa-1000-4000-8000-000000000001'); -- lead
 
 select lives_ok(
   $$ update public.deliverables set status = 'client_review' where id = '99999999-1000-4000-8000-000000000001' $$,
-  'account leads sign off and send to the client'
+  'account leads send work to the client (their default permission)'
 );
 
 select pg_temp.login('aaaaaaaa-1000-4000-8000-000000000002'); -- creator
@@ -203,6 +203,17 @@ select is(
 );
 
 update public.deliverables set status = 'client_review' where id = '99999999-1000-4000-8000-000000000001';
+
+select throws_ok(
+  $$ update public.deliverables set status = 'approved' where id = '99999999-1000-4000-8000-000000000001' $$,
+  '42501', null,
+  'account leads can''t approve unless a partner gives them that permission'
+);
+
+select pg_temp.logout();
+update public.team_members set can_approve = true where id = 'bbbbbbbb-1000-4000-8000-000000000001';
+select pg_temp.login('aaaaaaaa-1000-4000-8000-000000000001'); -- lead, now allowed to approve
+
 update public.deliverables set status = 'approved' where id = '99999999-1000-4000-8000-000000000001';
 
 select is(

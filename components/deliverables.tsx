@@ -212,11 +212,11 @@ function SortHeader({
 
 /** One-click "move to the next step" for rows in My work. */
 export function QuickMove({ row }: { row: BoardRow }) {
-  const { role, move } = useNumu();
+  const { me, move } = useNumu();
   const [error, setError] = useState<string | null>(null);
   const next = nextStatus(row.deliverable_type, row.status);
   if (!next) return null;
-  const check = canMove(role, row.status, next, row.deliverable_type);
+  const check = canMove(me, row.status, next, row.deliverable_type);
   if (!check.ok) return null;
   return (
     <button

@@ -42,7 +42,7 @@ R = read, W = create/edit, D = delete. Enforced by row-level security and tested
 | deliverable_board (view) | R | R | R | – | – |
 | `generate_month_deliverables()` | run | run | – | – | – |
 
-Sign-off (into/out of Client review, into Approved) is limited to partners and account leads by the workflow trigger, on top of the table rights above. Clients get the portal in phase 3 through narrow functions that only expose client-safe fields (no internal comments, no revision counts), not through these tables.
+On top of the table rights above, three per-person permissions on `team_members` (set by partners in Team → Permissions; new people get their role's defaults) are checked by the workflow trigger and the deliverables insert policy: `can_approve` (into Approved; default partners), `can_send_to_client` (into or out of Client review; default partners and account leads) and `can_create_tasks` (add deliverables and tasks; default everyone). Clients get the portal in phase 3 through narrow functions that only expose client-safe fields (no internal comments, no revision counts), not through these tables.
 
 ## Deliverable types
 

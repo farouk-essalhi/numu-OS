@@ -54,6 +54,9 @@ export type Database = {
           employment: Enums["employment_type"];
           weekly_capacity_points: number;
           is_active: boolean;
+          can_create_tasks: boolean;
+          can_send_to_client: boolean;
+          can_approve: boolean;
         } & Stamps,
         | "id"
         | "user_id"
@@ -64,6 +67,9 @@ export type Database = {
         | "employment"
         | "weekly_capacity_points"
         | "is_active"
+        | "can_create_tasks"
+        | "can_send_to_client"
+        | "can_approve"
         | keyof Stamps
       >;
       clients: Table<

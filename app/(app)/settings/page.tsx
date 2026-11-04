@@ -29,6 +29,8 @@ export default function SettingsPage() {
             <div className="flex flex-wrap gap-2">
               <Pill tone="info">{ROLE_LABEL[role]}</Pill>
               {me.weekly_capacity_points ? <Pill>{me.weekly_capacity_points} pts / week</Pill> : null}
+              {me.can_approve ? <Pill tone="good">Approves content</Pill> : null}
+              {me.can_send_to_client ? <Pill>Sends to clients</Pill> : null}
               <Pill className="capitalize">{me.employment.replace("_", " ")}</Pill>
             </div>
           </div>

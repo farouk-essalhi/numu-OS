@@ -602,6 +602,10 @@ function MemberForm({ row, onDone }: { row?: TeamMember; onDone: () => void }) {
         employment: f.employment,
         weekly_capacity_points: capacity,
         is_active: f.is_active,
+        // New people get their role's defaults (the database sets them too); partners change them in Permissions.
+        can_create_tasks: row?.can_create_tasks ?? true,
+        can_send_to_client: row?.can_send_to_client ?? f.access_level !== "creator",
+        can_approve: row?.can_approve ?? f.access_level === "partner",
       },
       row ? "Saved" : `${f.full_name.trim()} added`,
     );

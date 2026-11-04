@@ -10,7 +10,10 @@ import type { Dataset } from "./types";
 export const ENTITIES = {
   team: {
     table: "team_members",
-    columns: ["full_name", "email", "phone", "job_title", "access_level", "employment", "weekly_capacity_points", "is_active"],
+    columns: [
+      "full_name", "email", "phone", "job_title", "access_level", "employment", "weekly_capacity_points", "is_active",
+      "can_create_tasks", "can_send_to_client", "can_approve",
+    ],
   },
   clients: {
     table: "clients",

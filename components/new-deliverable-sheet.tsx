@@ -8,7 +8,7 @@ import { addDays, dayNumber, isWorkingDay } from "@/lib/dates";
 import { cn, PLATFORM_LABEL } from "@/lib/format";
 import { useMediaQuery } from "@/lib/hooks";
 import { ledClientIds } from "@/lib/selectors";
-import { useNumu } from "@/lib/store";
+import { canPlan, useNumu } from "@/lib/store";
 import type { DeliverableTypeCode, Platform } from "@/lib/types";
 import { Check } from "./forms";
 import { Button, IconButton, Segmented } from "./ui";
@@ -102,7 +102,9 @@ function Form({ onDone }: { onDone: () => void }) {
   const projects = data.projects.filter((p) => p.client_id === clientId && (p.status === "active" || p.status === "planned"));
   const typeName = data.deliverableTypes.find((t) => t.code === type)?.name_en ?? "";
   const fallbackTitle = isTask ? typeName : `${typeName}${platform ? ` · ${PLATFORM_LABEL[platform]}` : ""}`;
-  const canRepeat = isTask && !projectId && Boolean(retainer);
+  // Content and repeating tasks hang off retainers and scope, which only leads and partners manage.
+  const plans = canPlan(role);
+  const canRepeat = plans && isTask && !projectId && Boolean(retainer);
 
   function switchKind(k: Kind) {
     setKind(k);
@@ -173,15 +175,17 @@ function Form({ onDone }: { onDone: () => void }) {
             Add a client first (Clients → New client). For NUMU&apos;s own work, add NUMU as a client.
           </p>
         ) : null}
-        <Segmented
-          className="w-full [&>button]:flex-1"
-          value={kind}
-          onChange={switchKind}
-          options={[
-            { value: "task", label: "Task" },
-            { value: "content", label: "Content deliverable" },
-          ]}
-        />
+        {plans ? (
+          <Segmented
+            className="w-full [&>button]:flex-1"
+            value={kind}
+            onChange={switchKind}
+            options={[
+              { value: "task", label: "Task" },
+              { value: "content", label: "Content deliverable" },
+            ]}
+          />
+        ) : null}
         <Field label={isTask ? "What needs doing" : "Title"}>
           <input
             value={title}
@@ -270,9 +274,11 @@ function Form({ onDone }: { onDone: () => void }) {
             hint={
               canRepeat
                 ? `Adds it to ${client?.name_en ?? "the client"}'s monthly scope, so it's created with the rest of each month (moved to the next working day when needed).`
-                : projectId
-                  ? "Campaign tasks don't repeat."
-                  : "Needs an active retainer for this client."
+                : !plans
+                  ? "Partners and account leads set up repeating tasks."
+                  : projectId
+                    ? "Campaign tasks don't repeat."
+                    : "Needs an active retainer for this client."
             }
           />
         ) : null}

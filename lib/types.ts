@@ -70,6 +70,10 @@ export interface TeamMember {
   employment: EmploymentType;
   weekly_capacity_points: number;
   is_active: boolean;
+  /** Permissions partners set per person (Team → Permissions). */
+  can_create_tasks: boolean;
+  can_send_to_client: boolean;
+  can_approve: boolean;
 }
 
 export interface Client {

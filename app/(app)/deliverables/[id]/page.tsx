@@ -14,7 +14,7 @@ import { canMove, nextStatus, STATUSES, STATUS_META } from "@/lib/workflow";
 
 export default function DeliverablePage() {
   const { id } = useParams<{ id: string }>();
-  const { rows, data, role, today, now, move, update, comment } = useNumu();
+  const { rows, data, me, role, today, now, move, update, comment } = useNumu();
   const row = rows.find((r) => r.id === id);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
@@ -44,7 +44,7 @@ export default function DeliverablePage() {
   }
 
   const next = nextStatus(row.deliverable_type, row.status);
-  const nextOk = next ? canMove(role, row.status, next, row.deliverable_type) : null;
+  const nextOk = next ? canMove(me, row.status, next, row.deliverable_type) : null;
   const project = row.project_id ? data.projects.find((p) => p.id === row.project_id) : null;
   const isTask = !row.type.is_content;
 
@@ -93,7 +93,7 @@ export default function DeliverablePage() {
             >
               <option value="">Move to…</option>
               {STATUSES.filter((s) => s !== row.status).map((s) => {
-                const c = canMove(role, row.status, s, row.deliverable_type);
+                const c = canMove(me, row.status, s, row.deliverable_type);
                 return (
                   <option key={s} value={s} disabled={!c.ok}>
                     {STATUS_META[s].en}
@@ -105,14 +105,18 @@ export default function DeliverablePage() {
             <ChevronRight className="pointer-events-none absolute top-1/2 right-2.5 size-3.5 -translate-y-1/2 rotate-90 text-muted" />
           </label>
           )}
-          {row.status === "client_review" && role !== "creator" ? (
+          {row.status === "client_review" && (me.can_send_to_client || me.can_approve) ? (
             <>
-              <Button onClick={() => go("editing")} title="Client asked for changes (counts a revision)">
-                <RotateCcw /> Changes requested
-              </Button>
-              <Button variant="primary" onClick={() => go("approved")}>
-                <Check /> Client approved
-              </Button>
+              {me.can_send_to_client ? (
+                <Button onClick={() => go("editing")} title="Client asked for changes (counts a revision)">
+                  <RotateCcw /> Changes requested
+                </Button>
+              ) : null}
+              {me.can_approve ? (
+                <Button variant="primary" onClick={() => go("approved")}>
+                  <Check /> Client approved
+                </Button>
+              ) : null}
             </>
           ) : next && nextOk?.ok ? (
             <Button variant="primary" onClick={() => go(next)}>

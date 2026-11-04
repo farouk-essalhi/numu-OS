@@ -275,7 +275,7 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
     (id: string, to: DeliverableStatus): MoveResult => {
       const d = data.deliverables.find((x) => x.id === id);
       if (!d) return { ok: false, reason: "Not found" };
-      const result = applyMove(d, to, { teamMemberId: me.id, role });
+      const result = applyMove(d, to, { teamMemberId: me.id, perms: me });
       if (result.ok) {
         setData((prev) => ({
           ...prev,
@@ -286,7 +286,7 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
       }
       return result;
     },
-    [data.deliverables, me.id, role, isLive, write],
+    [data.deliverables, me, isLive, write],
   );
 
   const update = useCallback(
@@ -306,7 +306,7 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
 
   const create = useCallback(
     (input: NewDeliverableInput) => {
-      if (role === "creator") return { ok: false as const, reason: "Partners and account leads add tasks" };
+      if (!me.can_create_tasks) return { ok: false as const, reason: "Adding tasks needs permission (Team → Permissions)" };
       const type = data.deliverableTypes.find((t) => t.code === input.deliverable_type)!;
       // Content counts against a campaign or the client's active retainer (an
       // extra outside scope). A task can stand alone, or sit on a campaign, or
@@ -362,7 +362,7 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
       if (isLive) void write(() => insertRow(supabase(), "deliverables", id, payloadFor("deliverables", d)));
       return { ok: true as const, id };
     },
-    [data.retainers, data.deliverableTypes, me.id, role, isLive, write],
+    [data.retainers, data.deliverableTypes, me.id, me.can_create_tasks, isLive, write],
   );
 
   const comment = useCallback(
