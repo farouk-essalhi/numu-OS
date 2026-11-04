@@ -1,13 +1,10 @@
 import type { Metadata, Viewport } from "next";
-import { Doto, Geist, IBM_Plex_Sans_Arabic } from "next/font/google";
+import { Geist, Geist_Mono, IBM_Plex_Sans_Arabic } from "next/font/google";
 import { THEME_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
-
-// Dot-matrix numerals for the one big number on a screen.
-const doto = Doto({ variable: "--font-doto", subsets: ["latin"], weight: ["700", "900"] });
-
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 const plexArabic = IBM_Plex_Sans_Arabic({
   variable: "--font-plex-arabic",
   subsets: ["arabic"],
@@ -27,8 +24,8 @@ export const viewport: Viewport = {
   initialScale: 1,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#ecebe7" },
-    { media: "(prefers-color-scheme: dark)", color: "#121110" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f6f4" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0b0c" },
   ],
 };
 
@@ -37,7 +34,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geist.variable} ${doto.variable} ${plexArabic.variable} h-full antialiased`}
+      className={`${geist.variable} ${geistMono.variable} ${plexArabic.variable} h-full antialiased`}
     >
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />

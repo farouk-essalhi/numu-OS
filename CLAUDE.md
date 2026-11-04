@@ -21,8 +21,8 @@ Phase 0 gate (all must be true before Phase 1 starts):
 **Next: Phase 1 (Core production), Nov 15–Dec 5.** Goal: the team runs daily work in NUMU OS instead of ClickUp.
 - [x] Database: clients, contacts, retainers, scope lines, projects, deliverables, status history, comments, RLS (`supabase/migrations`, tested)
 - [x] Monthly deliverable generator (database function + pg_cron on the 25th), with tests
-- [x] App shell and design system: role-aware navigation, light/dark, installable (PWA manifest)
-- [x] Screens on demo data: My work, board (by status, client, person), pulse, schedule, clients, client detail, deliverable detail (move, links, comments, history), new deliverable
+- [x] App shell and design system: responsive sidebar/top bar/tab bar, ⌘K search, notifications, light/dark, installable (PWA manifest)
+- [x] Screens on demo data: Overview dashboard, My work, Approvals, Deliverables (board + list) and deliverable detail, Calendar, Clients and client detail, Campaigns, Capacity, Reports, Settings, New deliverable panel
 - [ ] Connect to Supabase: magic-link login, read/write through RLS (swap `lib/store.tsx`, nothing else)
 - [ ] Clients, contacts, retainers and scope lines: create and edit screens
 - [ ] One-off projects: create and edit (the first real campaign goes in here)
@@ -104,9 +104,10 @@ supabase/migrations/      every database change, in order
 supabase/seed.sql         fictional clients, retainers and a month of deliverables
 supabase/tests/           pgTAP tests (generator, workflow, access per role)
 scripts/db/               run migrations + tests on plain Postgres (no Docker)
-app/(app)/                screens (My work, pulse, board, schedule, clients, deliverable, profile)
-components/               UI kit (ui.tsx), visuals (heatmap, orbs, ruler), cards, shell, sheets
-lib/                      types (mirror the DB), dates (Doha), workflow rules, selectors, store
+app/(app)/                pages: overview, my-work, approvals, deliverables, calendar, clients, campaigns, team, reports, settings
+components/shell/         sidebar, top bar, phone tab bar, ⌘K command palette, navigation config
+components/               ui.tsx (primitives), charts.tsx, deliverables.tsx (table, board, stepper), new-deliverable-sheet.tsx
+lib/                      types (mirror the DB), dates (Doha), workflow rules, selectors, insights (dashboard numbers), store
 lib/demo/                 demo data until Supabase exists (fictional)
 mcp/                      Claude connection (phase 5)
 ```
@@ -142,10 +143,10 @@ Not yet (later phases): invoices, payments, expenses, partner draws (2) · conte
 
 Calm and fast. One clear number per screen (each dashboard opens on the number that matters to that person). Dark mode. Mobile first for the team (move cards from a shoot), desktop first for partners. If something takes longer in NUMU OS than in WhatsApp, fix the app, not the people.
 
-The visual language (from the reference screens Farouk shared), all tokens in `app/globals.css`:
-- Warm greige background (`bg`), soft cards (`surface`, 26px radius), grouped grey rows (`inset`), ink text, one dark pill for the main action (`.pill-primary`).
-- The one big number is set in dot-matrix numerals (`DotNumber`, Doto). Swipeable focus cards with a warm glow and the status ruler on Home.
-- Glass orbs for the week (`WeekOrbs`), a posting heatmap (`Heatmap`), hatched bars for client progress (`TypeBars`), a coloured left bar for status on cards.
-- Floating tab bar (My work · Pulse · Board · Profile) with the + button for New deliverable (partners and leads only). Schedule and Clients open from the header.
-- Bottom sheets (vaul) with native pickers over grouped rows: fastest on phones.
-- Use the existing components before adding new ones; status colours come from `STATUS_META[status].tone`.
+The visual language, adapted from the product dashboards Farouk shared (Efferd, Nexora, Wiko, VERIQ, Nakdis). Tokens live in `app/globals.css`:
+- **Shell** (`components/shell/`): left sidebar with grouped navigation and count badges (full width from 1024px, icon rail from 768px, a drawer on phones); top bar with breadcrumb, ⌘K search, theme toggle and "Needs you" notifications; on phones a bottom tab bar (Overview, My work, Board, Approvals).
+- **Surfaces**: white cards with hairline borders on a soft plane, ink for primary actions, NUMU orange only for the brand mark and attention badges. Dark mode is its own tuned palette, not an inversion.
+- **Data**: KPI cards show the change vs the previous period; lists are sortable tables with tabs on desktop and cards on phones; the board has a board/list toggle; a status is a neutral pill with a coloured dot (`STATUS_META[status].color`).
+- **Charts** (`components/charts.tsx`) follow the data-viz rules: categorical colours in fixed order (blue, orange, aqua, yellow), bars at most 24px with 4px rounded ends and 2px gaps, a legend for two or more series, hover/focus tooltips and a hidden data table. Status colours (good, warning, serious, critical) are reserved and always come with an icon and a label.
+- Every screen must work at 390px (phone), 768–1023px (tablet) and 1440px (desktop), in light and dark. Check all three before pushing UI changes.
+- Use the existing components (`components/ui.tsx`, `charts.tsx`, `deliverables.tsx`) before adding new ones.

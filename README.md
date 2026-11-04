@@ -18,7 +18,7 @@ npm install
 npm run dev        # http://localhost:3000
 ```
 
-Best viewed at phone width. Profile → "View as" switches between a partner, an account lead and a creator to see what each role gets. Light and dark follow the device, or set them in Profile → Appearance.
+Works on desktop, tablet and phone. Settings → "View as" switches between a partner, an account lead and a creator to see what each role gets. ⌘K searches everything. Light and dark follow the device, or use the toggle in the top bar.
 
 ```bash
 npm test           # unit tests

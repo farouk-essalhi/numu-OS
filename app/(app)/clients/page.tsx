@@ -1,107 +1,146 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Avatar, PageHeader } from "@/components/ui";
-import { formatRelative } from "@/lib/dates";
-import { cn, firstName } from "@/lib/format";
-import { clientMonth, ledClientIds } from "@/lib/selectors";
+import { Avatar, Card, PageHeader, Pill, Progress, TONE_ICON } from "@/components/ui";
+import { formatMonth, formatRelative } from "@/lib/dates";
+import { firstName, formatMoney, percent } from "@/lib/format";
+import { clientSummaries, HEALTH_META, type Health } from "@/lib/insights";
 import { useNumu } from "@/lib/store";
 
-/** Screenshot 6's list layout, used for clients (chat is out of scope). */
 export default function ClientsPage() {
-  const { rows, data, me, role, today, thisMonth } = useNumu();
+  const { rows, data, role, today, thisMonth } = useNumu();
+  const router = useRouter();
   const [q, setQ] = useState("");
-
-  const all = useMemo(
-    () =>
-      data.clients
-        .map((c) => clientMonth(rows, c, thisMonth, today))
-        .sort((a, b) => b.overdue + b.waiting - (a.overdue + a.waiting) || a.client.name_en.localeCompare(b.client.name_en)),
-    [rows, data.clients, thisMonth, today],
-  );
-  const led = ledClientIds(data, me.id, role);
-  const yours = role === "creator" ? [] : all.filter((c) => led.has(c.client.id));
+  const seesFees = role !== "creator";
+  const all = useMemo(() => clientSummaries(rows, data, thisMonth, today), [rows, data, thisMonth, today]);
   const list = all.filter((c) => !q || c.client.name_en.toLowerCase().includes(q.toLowerCase()) || (c.client.name_ar ?? "").includes(q));
+  const counts = (h: Health) => all.filter((c) => c.health === h).length;
 
   return (
     <>
-      <PageHeader title="Clients" back />
+      <PageHeader
+        title="Clients"
+        subtitle={`${all.length} active clients · ${formatMonth(thisMonth)}`}
+        actions={
+          <label className="flex h-9 w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 shadow-sm sm:w-[240px]">
+            <Search className="size-4 text-muted" />
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search clients"
+              aria-label="Search clients"
+              className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted"
+            />
+          </label>
+        }
+      />
 
-      <div className="flex items-center gap-2 rounded-full bg-raised py-1.5 pr-4 pl-4 shadow-card">
-        <Search className="size-[18px] text-muted" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search clients…"
-          aria-label="Search clients"
-          className="h-9 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted"
-        />
+      <div className="mb-4 grid grid-cols-3 gap-3">
+        {(["on_track", "at_risk", "behind"] as Health[]).map((h) => (
+          <div key={h} className="rounded-xl border border-line bg-surface p-3 shadow-sm sm:p-4">
+            <Pill tone={HEALTH_META[h].tone} icon={TONE_ICON[HEALTH_META[h].tone]}>
+              {HEALTH_META[h].label}
+            </Pill>
+            <p className="mt-2 text-[24px] leading-none font-semibold num">{counts(h)}</p>
+          </div>
+        ))}
       </div>
 
-      {yours.length > 0 ? (
-        <>
-          <div className="mt-6 mb-3 flex items-baseline justify-between">
-            <h2 className="text-[17px] font-semibold">You lead</h2>
-            <span className="text-[13px] text-muted">{yours.length}</span>
-          </div>
-          <div className="no-scrollbar -mx-4 flex gap-4 overflow-x-auto px-4 pb-1">
-            {yours.map((c) => (
-              <Link key={c.client.id} href={`/clients/${c.client.id}`} className="flex w-14 shrink-0 flex-col items-center gap-1.5">
-                <span className="relative">
-                  <Avatar name={c.client.name_en} size={52} />
-                  <span
-                    className={cn(
-                      "absolute right-0 bottom-0 size-3.5 rounded-full ring-2 ring-bg",
-                      c.overdue > 0 ? "bg-danger" : c.waiting > 0 ? "bg-accent" : "bg-[var(--tone-green)]",
+      <Card className="overflow-hidden">
+        <div className="scroll-thin hidden overflow-x-auto md:block">
+          <table className="w-full min-w-[820px] text-[13px]">
+            <thead className="border-b border-line bg-surface-2 text-left text-[12px] text-muted">
+              <tr>
+                <th className="py-2.5 pr-3 pl-5 font-medium">Client</th>
+                <th className="px-3 font-medium">Lead</th>
+                {seesFees ? <th className="px-3 text-right font-medium">Retainer</th> : null}
+                <th className="px-3 font-medium">This month</th>
+                <th className="px-3 text-right font-medium">With client</th>
+                <th className="px-3 text-right font-medium">Late</th>
+                <th className="px-3 font-medium">Next due</th>
+                <th className="py-2.5 pr-5 pl-3 font-medium">Health</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {list.map((c) => (
+                <tr key={c.client.id} onClick={() => router.push(`/clients/${c.client.id}`)} className="cursor-pointer hover:bg-surface-2">
+                  <td className="py-3 pr-3 pl-5">
+                    <span className="flex items-center gap-3">
+                      <Avatar name={c.client.name_en} size={32} square />
+                      <span className="min-w-0">
+                        <Link href={`/clients/${c.client.id}`} onClick={(e) => e.stopPropagation()} className="block truncate font-medium hover:underline">
+                          {c.client.name_en}
+                        </Link>
+                        <span lang="ar" dir="rtl" className="block truncate text-left text-[12px] text-muted">
+                          {c.client.name_ar}
+                        </span>
+                      </span>
+                    </span>
+                  </td>
+                  <td className="px-3 text-ink-2">
+                    {c.lead ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Avatar name={c.lead.full_name} size={22} />
+                        {firstName(c.lead.full_name)}
+                      </span>
+                    ) : (
+                      "–"
                     )}
-                  />
-                </span>
-                <span className="w-full truncate text-center text-[12px] text-ink-2">{firstName(c.client.name_en)}</span>
-              </Link>
-            ))}
-          </div>
-        </>
-      ) : null}
+                  </td>
+                  {seesFees ? <td className="px-3 text-right font-medium num">{c.feeMinor != null ? formatMoney(c.feeMinor, c.currency) : "–"}</td> : null}
+                  <td className="w-[200px] px-3">
+                    <span className="flex items-center gap-2.5">
+                      <Progress value={percent(c.done, c.total)} className="flex-1" />
+                      <span className="w-12 text-right text-[12px] text-muted num">
+                        {c.done}/{c.total}
+                      </span>
+                    </span>
+                  </td>
+                  <td className="px-3 text-right num">{c.waiting || <span className="text-faint">0</span>}</td>
+                  <td className="px-3 text-right num">{c.overdue ? <span className="font-medium text-critical">{c.overdue}</span> : <span className="text-faint">0</span>}</td>
+                  <td className="px-3 text-ink-2">{c.nextDue ? formatRelative(c.nextDue.due_date, today) : "–"}</td>
+                  <td className="py-3 pr-5 pl-3">
+                    <Pill tone={HEALTH_META[c.health].tone} icon={TONE_ICON[HEALTH_META[c.health].tone]}>
+                      {HEALTH_META[c.health].label}
+                    </Pill>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
-      <div className="mt-6 mb-3 flex items-baseline justify-between">
-        <h2 className="text-[17px] font-semibold">All clients</h2>
-        <span className="text-[13px] text-muted">This month</span>
-      </div>
-      <div className="divide-y divide-line rounded-[26px] bg-surface px-4 shadow-card">
-        {list.map((c) => {
-          const open = c.rows.filter((r) => r.flags.overdue || r.status === "client_review").length;
-          const summary =
-            c.overdue > 0
-              ? `${c.overdue} late · ${c.done} of ${c.total} done`
-              : c.waiting > 0
-                ? `${c.waiting} waiting on client · ${c.done} of ${c.total} done`
-                : `${c.done} of ${c.total} done this month`;
-          return (
-            <Link key={c.client.id} href={`/clients/${c.client.id}`} className="flex items-center gap-3 py-3.5">
-              <Avatar name={c.client.name_en} size={44} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-baseline justify-between gap-2">
-                  <p className="truncate text-[15px] font-medium">{c.client.name_en}</p>
-                  <span className="shrink-0 text-[12px] text-muted">
-                    {c.nextDue ? formatRelative(c.nextDue.due_date, today).replace(/^\w+, /, "") : ""}
+        <ul className="divide-y divide-line md:hidden">
+          {list.map((c) => (
+            <li key={c.client.id}>
+              <Link href={`/clients/${c.client.id}`} className="block px-4 py-3.5">
+                <div className="flex items-center gap-3">
+                  <Avatar name={c.client.name_en} size={36} square />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[14px] font-medium">{c.client.name_en}</p>
+                    <p className="truncate text-[12px] text-muted">
+                      {c.lead ? `Led by ${firstName(c.lead.full_name)}` : "No lead"}
+                      {seesFees && c.feeMinor != null ? ` · ${formatMoney(c.feeMinor, c.currency)}` : ""}
+                    </p>
+                  </div>
+                  <Pill tone={HEALTH_META[c.health].tone} icon={TONE_ICON[HEALTH_META[c.health].tone]}>
+                    {HEALTH_META[c.health].label}
+                  </Pill>
+                </div>
+                <div className="mt-2.5 flex items-center gap-2.5">
+                  <Progress value={percent(c.done, c.total)} className="flex-1" />
+                  <span className="text-[12px] text-muted num">
+                    {c.done}/{c.total} done{c.waiting ? ` · ${c.waiting} with client` : ""}
                   </span>
                 </div>
-                <div className="mt-0.5 flex items-center justify-between gap-2">
-                  <p className="truncate text-[13px] text-muted">{summary}</p>
-                  {open > 0 ? (
-                    <span className="grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-semibold text-primary-ink">
-                      {open}
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-            </Link>
-          );
-        })}
-        {list.length === 0 ? <p className="py-6 text-center text-[14px] text-muted">No clients match.</p> : null}
-      </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </Card>
     </>
   );
 }

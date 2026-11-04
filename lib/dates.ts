@@ -154,3 +154,18 @@ export function formatHours(hours: number): string {
   if (hours < 48) return `${Math.round(hours)}h`;
   return `${Math.round(hours / 24)}d`;
 }
+
+/** "just now", "12m ago", "5h ago", "3d ago" */
+export function timeAgo(ts: string, nowMs: number): string {
+  const mins = (nowMs - Date.parse(ts)) / 60_000;
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${Math.round(mins)}m ago`;
+  if (mins < 60 * 24) return `${Math.round(mins / 60)}h ago`;
+  return `${Math.round(mins / 1440)}d ago`;
+}
+
+/** "Wednesday, 4 November" */
+export function formatLong(day: IsoDate): string {
+  const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  return `${names[dayOfWeek(day)]}, ${dayNumber(day)} ${MONTH_LONG[Number(day.slice(5, 7)) - 1]}`;
+}

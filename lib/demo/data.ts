@@ -188,15 +188,27 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
   const nowIso = now.toISOString();
 
   const pushEvents = (d: Deliverable, path: { status: DeliverableStatus; at: string }[]) => {
-    // Never in the future, always in order.
+    // Steps planned for the future are spread evenly between the last real
+    // step and now, so the history always ends before today and reads naturally.
+    const firstFuture = path.findIndex((p) => p.at > nowIso);
+    let steps = path;
+    if (firstFuture >= 0) {
+      const startMs = firstFuture > 0 ? Date.parse(path[firstFuture - 1].at) : now.getTime() - 2 * 86_400_000;
+      const endMs = now.getTime() - 25 * 60_000;
+      const k = path.length - firstFuture;
+      const span = Math.max(k * 60_000, endMs - startMs);
+      steps = path.map((p, i) =>
+        i < firstFuture ? p : { ...p, at: new Date(Math.min(endMs, startMs + (span * (i - firstFuture + 1)) / (k + 1))).toISOString() },
+      );
+    }
     let prev = "";
-    path.forEach((step, i) => {
-      let when = step.at > nowIso ? new Date(now.getTime() - (path.length - i) * 7 * 60_000).toISOString() : step.at;
-      if (when <= prev) when = new Date(new Date(prev).getTime() + 60_000).toISOString();
+    steps.forEach((step, i) => {
+      let when = step.at;
+      if (when <= prev) when = new Date(Date.parse(prev) + 60_000).toISOString();
       events.push({
         id: eventId++,
         deliverable_id: d.id,
-        from_status: i === 0 ? null : path[i - 1].status,
+        from_status: i === 0 ? null : steps[i - 1].status,
         to_status: step.status,
         changed_by_team_member_id: i === 0 ? null : d.owner_id,
         changed_by_contact_id: null,

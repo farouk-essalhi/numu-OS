@@ -1,5 +1,6 @@
 import { Suspense } from "react";
-import { AppShell, ShellSkeleton } from "@/components/app-shell";
+import { AppShell } from "@/components/shell/app-shell";
+import { ShellSkeleton } from "@/components/shell/skeleton";
 import { NumuProvider } from "@/lib/store";
 
 // The signed-in app. It depends on who is looking and on today's date in

@@ -1,122 +1,176 @@
 @import "tailwindcss";
 
 /* ---------------------------------------------------------------------------
-   NUMU OS design tokens. Calm greige surfaces, ink text, one dark pill for
-   the main action, soft status tones. Light by default, dark via the device
-   or the Appearance setting (data-theme on <html>).
+   NUMU OS design tokens. A calm, dense product UI: white surfaces on a soft
+   plane, hairline borders, ink for primary actions, NUMU orange for the brand
+   mark only. Charts use the validated data-viz palette (see CLAUDE.md, Design).
+   Dark mode is its own set of steps, not an inversion.
    --------------------------------------------------------------------------- */
 
 :root {
-  --bg: #ecebe7;
-  --surface: #f7f6f3;
-  --raised: #fdfcfa;
-  --inset: #e7e4df;
-  --ink: #1c1b19;
-  --ink-2: #3b3a37;
-  --muted: #8b8781;
-  --faint: #bdb9b2;
-  --line: #e2dfd9;
-  --primary: #2b2a27;
-  --primary-ink: #faf9f7;
-  --accent: #e9773a;
-  --danger: #d4553f;
-  --nav: rgb(247 246 243 / 0.82);
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #fafaf9;
+  --surface-3: #f1f1ee;
+  --sidebar: #fbfbfa;
+  --line: #e8e7e3;
+  --line-strong: #d7d6d1;
+  --ink: #111110;
+  --ink-2: #3d3c39;
+  --muted: #6c6b66;
+  --faint: #a3a29d;
+  --primary: #151514;
+  --primary-ink: #ffffff;
+  --brand: #e8622a;
+  --focus: #2a78d6;
 
-  --tone-slate: #aaa69f;
-  --tone-violet: #9a8ae0;
-  --tone-amber: #e1a43a;
-  --tone-sky: #6aa6d9;
-  --tone-indigo: #7a7fe0;
-  --tone-orange: #e9773a;
-  --tone-green: #78b267;
-  --tone-teal: #4aa596;
-  --tone-ink: #2b2a27;
+  /* Chart chrome and categorical slots (fixed order: blue, orange, aqua, yellow). */
+  --chart-surface: #ffffff;
+  --grid: #ecebe6;
+  --axis: #c3c2b7;
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
 
-  --heat-0: #e4e1dc;
-  --heat-1: #cfcbc4;
-  --heat-2: #8f8b84;
-  --heat-3: #1c1b19;
+  /* Sequential (blue) for heatmaps: 0 = nothing. */
+  --seq-0: #f0efec;
+  --seq-1: #cde2fb;
+  --seq-2: #86b6ef;
+  --seq-3: #3987e5;
+  --seq-4: #1c5cab;
 
-  --shadow-card: 0 1px 2px rgb(28 27 25 / 0.04), 0 10px 28px -16px rgb(28 27 25 / 0.18);
-  --shadow-float: 0 12px 32px -10px rgb(28 27 25 / 0.35);
+  /* Status: reserved, always with an icon + label. */
+  --good: #0ca30c;
+  --good-ink: #006300;
+  --warning: #fab219;
+  --warning-ink: #8a5a00;
+  --serious: #ec835a;
+  --serious-ink: #b2471c;
+  --critical: #d03b3b;
+  --critical-ink: #b42323;
+
+  --shadow-sm: 0 1px 2px rgb(17 17 16 / 0.04);
+  --shadow-md: 0 1px 2px rgb(17 17 16 / 0.04), 0 8px 24px -12px rgb(17 17 16 / 0.16);
+  --shadow-lg: 0 24px 64px -16px rgb(17 17 16 / 0.28);
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #121110;
-    --surface: #1c1b19;
-    --raised: #232220;
-    --inset: #292825;
-    --ink: #f3f1ec;
-    --ink-2: #d5d2cb;
-    --muted: #8f8b84;
-    --faint: #5b5853;
-    --line: #2d2b28;
-    --primary: #f3f1ec;
-    --primary-ink: #161514;
-    --accent: #f08a4d;
-    --danger: #ec7a64;
-    --nav: rgb(28 27 25 / 0.82);
-    --tone-slate: #77736d;
-    --tone-ink: #f3f1ec;
-    --heat-0: #232220;
-    --heat-1: #3a3835;
-    --heat-2: #8f8b84;
-    --heat-3: #f3f1ec;
-    --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 10px 28px -16px rgb(0 0 0 / 0.6);
-    --shadow-float: 0 12px 32px -10px rgb(0 0 0 / 0.7);
+    --bg: #0b0b0c;
+    --surface: #141415;
+    --surface-2: #19191b;
+    --surface-3: #212124;
+    --sidebar: #0f0f10;
+    --line: #262629;
+    --line-strong: #35353a;
+    --ink: #f2f2ef;
+    --ink-2: #d2d1cc;
+    --muted: #9b9a94;
+    --faint: #6a6964;
+    --primary: #f2f2ef;
+    --primary-ink: #111110;
+    --brand: #f07a45;
+    --focus: #5598e7;
+    --chart-surface: #141415;
+    --grid: #252527;
+    --axis: #38383b;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --seq-0: #1d1d20;
+    --seq-1: #184f95;
+    --seq-2: #256abf;
+    --seq-3: #3987e5;
+    --seq-4: #86b6ef;
+    --good-ink: #2fbf2f;
+    --warning-ink: #fab219;
+    --serious-ink: #ec835a;
+    --critical-ink: #e66767;
+    --shadow-sm: 0 1px 0 rgb(255 255 255 / 0.02) inset;
+    --shadow-md: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -16px rgb(0 0 0 / 0.7);
+    --shadow-lg: 0 24px 64px -16px rgb(0 0 0 / 0.8);
     color-scheme: dark;
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #121110;
-  --surface: #1c1b19;
-  --raised: #232220;
-  --inset: #292825;
-  --ink: #f3f1ec;
-  --ink-2: #d5d2cb;
-  --muted: #8f8b84;
-  --faint: #5b5853;
-  --line: #2d2b28;
-  --primary: #f3f1ec;
-  --primary-ink: #161514;
-  --accent: #f08a4d;
-  --danger: #ec7a64;
-  --nav: rgb(28 27 25 / 0.82);
-  --tone-slate: #77736d;
-  --tone-ink: #f3f1ec;
-  --heat-0: #232220;
-  --heat-1: #3a3835;
-  --heat-2: #8f8b84;
-  --heat-3: #f3f1ec;
-  --shadow-card: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 10px 28px -16px rgb(0 0 0 / 0.6);
-  --shadow-float: 0 12px 32px -10px rgb(0 0 0 / 0.7);
+  --bg: #0b0b0c;
+  --surface: #141415;
+  --surface-2: #19191b;
+  --surface-3: #212124;
+  --sidebar: #0f0f10;
+  --line: #262629;
+  --line-strong: #35353a;
+  --ink: #f2f2ef;
+  --ink-2: #d2d1cc;
+  --muted: #9b9a94;
+  --faint: #6a6964;
+  --primary: #f2f2ef;
+  --primary-ink: #111110;
+  --brand: #f07a45;
+  --focus: #5598e7;
+  --chart-surface: #141415;
+  --grid: #252527;
+  --axis: #38383b;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --seq-0: #1d1d20;
+  --seq-1: #184f95;
+  --seq-2: #256abf;
+  --seq-3: #3987e5;
+  --seq-4: #86b6ef;
+  --good-ink: #2fbf2f;
+  --warning-ink: #fab219;
+  --serious-ink: #ec835a;
+  --critical-ink: #e66767;
+  --shadow-sm: 0 1px 0 rgb(255 255 255 / 0.02) inset;
+  --shadow-md: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 12px 32px -16px rgb(0 0 0 / 0.7);
+  --shadow-lg: 0 24px 64px -16px rgb(0 0 0 / 0.8);
   color-scheme: dark;
 }
 
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);
-  --color-raised: var(--raised);
-  --color-inset: var(--inset);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-sidebar: var(--sidebar);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-ink: var(--ink);
   --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
-  --color-line: var(--line);
   --color-primary: var(--primary);
   --color-primary-ink: var(--primary-ink);
-  --color-accent: var(--accent);
-  --color-danger: var(--danger);
+  --color-brand: var(--brand);
+  --color-focus: var(--focus);
+  --color-good: var(--good-ink);
+  --color-warning: var(--warning-ink);
+  --color-serious: var(--serious-ink);
+  --color-critical: var(--critical-ink);
 
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-dot: var(--font-doto), ui-monospace, monospace;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --font-arabic: var(--font-plex-arabic), var(--font-geist), sans-serif;
 
-  --shadow-card: var(--shadow-card);
-  --shadow-float: var(--shadow-float);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
 }
 
 html {
@@ -128,15 +182,24 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-feature-settings: "ss01", "cv11";
+  font-size: 14px;
+  font-feature-settings: "cv11", "ss01";
 }
 
-/* Arabic text: right-to-left, Arabic typeface. */
+/* Numbers line up in tables and KPIs. */
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
 [lang="ar"] {
   font-family: var(--font-arabic);
 }
 
-/* Hide scrollbars on horizontal carousels, keep them scrollable. */
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .no-scrollbar {
   scrollbar-width: none;
 }
@@ -144,73 +207,10 @@ body {
   display: none;
 }
 
-/* Status tones, used as a CSS variable so one class sets bar, dot and tint. */
-.tone-slate { --tone: var(--tone-slate); }
-.tone-violet { --tone: var(--tone-violet); }
-.tone-amber { --tone: var(--tone-amber); }
-.tone-sky { --tone: var(--tone-sky); }
-.tone-indigo { --tone: var(--tone-indigo); }
-.tone-orange { --tone: var(--tone-orange); }
-.tone-green { --tone: var(--tone-green); }
-.tone-teal { --tone: var(--tone-teal); }
-.tone-ink { --tone: var(--tone-ink); }
-
-/* Glass orbs for the week tracker (done / active / today). */
-.orb {
-  background:
-    radial-gradient(circle at 32% 28%, rgb(255 255 255 / 0.95) 0 9%, rgb(255 255 255 / 0) 30%),
-    radial-gradient(circle at 50% 60%, var(--orb-a) 0%, var(--orb-b) 72%, var(--orb-c) 100%);
-  box-shadow:
-    inset 0 -4px 10px rgb(0 0 0 / 0.08),
-    inset 0 2px 6px rgb(255 255 255 / 0.5),
-    0 8px 18px -8px var(--orb-glow);
-}
-.orb-green { --orb-a: #d9ebc9; --orb-b: #a9cd8e; --orb-c: #84b46b; --orb-glow: rgb(132 180 107 / 0.55); }
-.orb-lavender { --orb-a: #ebe5fb; --orb-b: #c3b6f0; --orb-c: #9d8be3; --orb-glow: rgb(157 139 227 / 0.55); }
-.orb-amber { --orb-a: #fbe6bf; --orb-b: #f2c071; --orb-c: #e39c34; --orb-glow: rgb(227 156 52 / 0.6); }
-
-/* Warm glow behind the hero card (screenshot 1). */
-.hero-glow {
-  background:
-    radial-gradient(120% 90% at 50% 0%, rgb(233 119 58 / 0.55) 0%, rgb(240 160 110 / 0.28) 38%, rgb(255 255 255 / 0) 70%),
-    radial-gradient(90% 70% at 85% 100%, rgb(154 175 230 / 0.35) 0%, rgb(255 255 255 / 0) 70%),
-    var(--raised);
-}
-.hero-glow-lavender {
-  background:
-    radial-gradient(120% 90% at 50% 0%, rgb(154 138 224 / 0.5) 0%, rgb(190 180 240 / 0.25) 40%, rgb(255 255 255 / 0) 70%),
-    radial-gradient(90% 70% at 10% 100%, rgb(233 119 58 / 0.18) 0%, rgb(255 255 255 / 0) 70%),
-    var(--raised);
-}
-.hero-glow-green {
-  background:
-    radial-gradient(120% 90% at 50% 0%, rgb(120 178 103 / 0.45) 0%, rgb(170 210 150 / 0.22) 40%, rgb(255 255 255 / 0) 70%),
-    radial-gradient(90% 70% at 90% 100%, rgb(225 164 58 / 0.2) 0%, rgb(255 255 255 / 0) 70%),
-    var(--raised);
-}
-
-/* Diagonal hatch for "remaining" bars (screenshot 2's project chart). */
-.hatch {
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgb(0 0 0 / 0.07) 0 2px,
-    transparent 2px 6px
-  );
-}
-:root[data-theme="dark"] .hatch {
-  background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.08) 0 2px, transparent 2px 6px);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .hatch {
-    background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.08) 0 2px, transparent 2px 6px);
-  }
-}
-
-/* Primary pill: soft top light like the reference buttons. */
-.pill-primary {
-  background: linear-gradient(180deg, color-mix(in oklab, var(--primary) 82%, white) 0%, var(--primary) 55%);
-  color: var(--primary-ink);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 0.12) inset, 0 6px 14px -6px rgb(28 27 25 / 0.5);
+/* Thin, quiet scrollbars inside panels on desktop. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
 }
 
 @media (prefers-reduced-motion: reduce) {

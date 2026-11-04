@@ -24,27 +24,17 @@ export const STATUSES: DeliverableStatus[] = [
   "posted",
 ];
 
-export type StatusTone =
-  | "slate"
-  | "violet"
-  | "amber"
-  | "sky"
-  | "indigo"
-  | "orange"
-  | "green"
-  | "teal"
-  | "ink";
-
-export const STATUS_META: Record<DeliverableStatus, { en: string; ar: string; short: string; tone: StatusTone }> = {
-  planned:         { en: "Planned",         ar: "مخطط",            short: "Planned",  tone: "slate" },
-  scripting:       { en: "Scripting",       ar: "كتابة السيناريو", short: "Script",   tone: "violet" },
-  shooting:        { en: "Shooting",        ar: "تصوير",           short: "Shoot",    tone: "amber" },
-  editing:         { en: "Editing",         ar: "مونتاج",          short: "Edit",     tone: "sky" },
-  internal_review: { en: "Internal review", ar: "مراجعة داخلية",   short: "Review",   tone: "indigo" },
-  client_review:   { en: "Client review",   ar: "مراجعة العميل",   short: "Client",   tone: "orange" },
-  approved:        { en: "Approved",        ar: "معتمد",           short: "Approved", tone: "green" },
-  scheduled:       { en: "Scheduled",       ar: "مجدول",           short: "Sched.",   tone: "teal" },
-  posted:          { en: "Posted",          ar: "منشور",           short: "Posted",   tone: "ink" },
+/** Identity colour per status (a dot beside the label, never colour alone). */
+export const STATUS_META: Record<DeliverableStatus, { en: string; ar: string; color: string }> = {
+  planned:         { en: "Planned",         ar: "مخطط",            color: "var(--faint)" },
+  scripting:       { en: "Scripting",       ar: "كتابة السيناريو", color: "var(--series-7)" },
+  shooting:        { en: "Shooting",        ar: "تصوير",           color: "var(--series-4)" },
+  editing:         { en: "Editing",         ar: "مونتاج",          color: "var(--series-1)" },
+  internal_review: { en: "Internal review", ar: "مراجعة داخلية",   color: "var(--series-5)" },
+  client_review:   { en: "Client review",   ar: "مراجعة العميل",   color: "var(--series-2)" },
+  approved:        { en: "Approved",        ar: "معتمد",           color: "var(--series-3)" },
+  scheduled:       { en: "Scheduled",       ar: "مجدول",           color: "var(--series-6)" },
+  posted:          { en: "Posted",          ar: "منشور",           color: "var(--ink)" },
 };
 
 export function statusIndex(status: DeliverableStatus): number {
