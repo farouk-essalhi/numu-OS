@@ -11,6 +11,7 @@ export type LanguageCode = "ar" | "en";
 
 export type DeliverableStatus =
   | "planned"
+  | "in_progress" // tasks only
   | "scripting"
   | "shooting"
   | "editing"
@@ -162,6 +163,10 @@ export interface Deliverable {
   post_url: string | null;
   posted_at: IsoTimestamp | null;
   created_at: IsoTimestamp;
+  /** The task this is a subtask of (one level only); null for top-level work. */
+  parent_id: string | null;
+  /** Order among its parent's subtasks. */
+  sort_order: number;
 }
 
 export interface StatusEvent {

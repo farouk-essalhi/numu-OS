@@ -90,6 +90,8 @@ const base: Deliverable = {
   post_url: null,
   posted_at: null,
   created_at: "2026-10-25T06:00:00Z",
+  parent_id: null,
+  sort_order: 0,
 };
 
 describe("workflow rules (same as the database trigger)", () => {

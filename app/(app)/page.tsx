@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { CalendarClock, Hourglass, ListChecks, RotateCcw, TriangleAlert } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
+import { BigTasksCard } from "@/components/big-tasks";
 import { Donut, Legend, Sparkbars, StackedColumns, TickMeter, type Series } from "@/components/charts";
 import {
   Avatar,
@@ -259,6 +260,8 @@ export default function OverviewPage() {
           )}
         </Card>
       </div>
+
+      <BigTasksCard rows={rows} today={today} />
 
       {/* Capacity, deadlines, activity */}
       <div className="mt-4 grid gap-4 lg:grid-cols-2 xl:grid-cols-3">

@@ -54,6 +54,9 @@ export interface NewDeliverableInput {
   /** Set when it repeats: the scope line it belongs to (seq 1 of its month), on this retainer. */
   scope_line_id?: string | null;
   retainer_id?: string | null;
+  /** Makes it a subtask of this task (it takes the parent's client and campaign). */
+  parent_id?: string | null;
+  sort_order?: number;
   deliverable_type: Deliverable["deliverable_type"];
   title: string;
   platform: Deliverable["platform"];
@@ -62,7 +65,7 @@ export interface NewDeliverableInput {
 }
 
 export type DeliverablePatch = Partial<
-  Pick<Deliverable, "title" | "owner_id" | "due_date" | "post_date" | "script_url" | "raw_url" | "final_url" | "post_url">
+  Pick<Deliverable, "title" | "owner_id" | "due_date" | "post_date" | "script_url" | "raw_url" | "final_url" | "post_url" | "sort_order">
 >;
 
 export interface Toast {
@@ -187,8 +190,11 @@ function demoDelete(data: Dataset, entity: EntityKey, id: string): Dataset {
   if (entity === "retainers") next.scopeLines = next.scopeLines.filter((s) => s.retainer_id !== id);
   if (entity === "scopeLines") next.deliverables = next.deliverables.map((d) => (d.scope_line_id === id ? { ...d, scope_line_id: null } : d));
   if (entity === "deliverables") {
-    next.statusEvents = next.statusEvents.filter((e) => e.deliverable_id !== id);
-    next.comments = next.comments.filter((c) => c.deliverable_id !== id);
+    // Its subtasks go too (the database cascades the same way).
+    const gone = new Set([id, ...data.deliverables.filter((d) => d.parent_id === id).map((d) => d.id)]);
+    next.deliverables = next.deliverables.filter((d) => !gone.has(d.id));
+    next.statusEvents = next.statusEvents.filter((e) => !gone.has(e.deliverable_id));
+    next.comments = next.comments.filter((c) => !gone.has(c.deliverable_id));
   }
   if (entity === "team") {
     next.clients = next.clients.map((c) => (c.account_lead_id === id ? { ...c, account_lead_id: null } : c));
@@ -349,23 +355,32 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
     (input: NewDeliverableInput) => {
       if (!me.can_create_tasks) return { ok: false as const, reason: "Adding tasks needs permission (Team → Permissions)" };
       const type = data.deliverableTypes.find((t) => t.code === input.deliverable_type)!;
+      // A subtask belongs wherever its parent does (the database copies it too).
+      const parent = input.parent_id ? data.deliverables.find((x) => x.id === input.parent_id) : null;
+      if (input.parent_id && !parent) return { ok: false as const, reason: "That task doesn't exist any more" };
+      if (parent?.parent_id) return { ok: false as const, reason: "Subtasks can't have subtasks of their own" };
+      if (parent && type.is_content) return { ok: false as const, reason: "Subtasks are tasks, not content" };
+      const clientId = parent?.client_id ?? input.client_id;
+      const projectId = parent ? parent.project_id : input.project_id;
       // Content counts against a campaign or the client's active retainer (an
       // extra outside scope). A task can stand alone, or sit on a campaign, or
       // repeat through a scope line on the retainer.
-      const retainerId = input.project_id
-        ? null
-        : (input.retainer_id ??
-          (type.is_content ? data.retainers.find((r) => r.client_id === input.client_id && r.status === "active")?.id : null) ??
-          null);
-      if (type.is_content && !input.project_id && !retainerId) return { ok: false as const, reason: "This client has no active retainer" };
+      const retainerId = parent
+        ? parent.retainer_id
+        : input.project_id
+          ? null
+          : (input.retainer_id ??
+            (type.is_content ? data.retainers.find((r) => r.client_id === input.client_id && r.status === "active")?.id : null) ??
+            null);
+      if (type.is_content && !projectId && !retainerId) return { ok: false as const, reason: "This client has no active retainer" };
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
       const d: Deliverable = {
         id,
-        client_id: input.client_id,
+        client_id: clientId,
         retainer_id: retainerId,
-        scope_line_id: input.scope_line_id ?? null, // none on content = an extra outside scope
-        project_id: input.project_id,
+        scope_line_id: parent ? null : (input.scope_line_id ?? null), // none on content = an extra outside scope
+        project_id: projectId,
         deliverable_type: input.deliverable_type,
         title: input.title.trim(),
         month: monthStart(input.due_date),
@@ -383,6 +398,8 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
         post_url: null,
         posted_at: null,
         created_at: createdAt,
+        parent_id: parent?.id ?? null,
+        sort_order: input.sort_order ?? 0,
       };
       setData((prev) => ({
         ...prev,
@@ -403,7 +420,7 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
       if (isLive) void write(() => insertRow(supabase(), "deliverables", id, payloadFor("deliverables", d)));
       return { ok: true as const, id };
     },
-    [data.retainers, data.deliverableTypes, me.id, me.can_create_tasks, isLive, write],
+    [data.retainers, data.deliverableTypes, data.deliverables, me.id, me.can_create_tasks, isLive, write],
   );
 
   const comment = useCallback(

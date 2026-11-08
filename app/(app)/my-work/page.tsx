@@ -7,7 +7,7 @@ import { TickMeter } from "@/components/charts";
 import { DeliverableTable } from "@/components/deliverables";
 import { Card, PageHeader, Tabs } from "@/components/ui";
 import { formatMonth } from "@/lib/dates";
-import { myWork } from "@/lib/selectors";
+import { myWork, countsForCapacity } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import { isDone } from "@/lib/workflow";
 
@@ -22,7 +22,7 @@ export default function MyWorkPage() {
   );
   // Open on the first tab with something in it.
   const [tab, setTab] = useState<Tab>(work.overdue.length ? "overdue" : work.thisWeek.length || !work.later.length ? "week" : "later");
-  const points = [...work.overdue, ...work.thisWeek].reduce((n, r) => n + r.effort_points, 0);
+  const points = [...work.overdue, ...work.thisWeek].filter(countsForCapacity).reduce((n, r) => n + r.effort_points, 0);
 
   const list = { overdue: work.overdue, week: work.thisWeek, later: work.later, done }[tab];
 

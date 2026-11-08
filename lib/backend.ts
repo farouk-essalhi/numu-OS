@@ -40,6 +40,7 @@ export const ENTITIES = {
     columns: [
       "client_id", "retainer_id", "scope_line_id", "project_id", "deliverable_type", "title", "month", "seq", "platform",
       "owner_id", "due_date", "post_date", "effort_points", "script_url", "raw_url", "final_url", "post_url",
+      "parent_id", "sort_order",
     ],
   },
 } as const;

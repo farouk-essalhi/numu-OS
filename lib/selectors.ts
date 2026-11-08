@@ -22,6 +22,17 @@ export interface BoardRow extends Deliverable {
   owner: TeamMember | null;
   statusSince: string | null;
   flags: Flags;
+  /** Its subtasks, in their order (empty for most work). */
+  subtasks: BoardRow[];
+  /** The task this is a subtask of. */
+  parent: { id: string; title: string } | null;
+  /** Subtask counts: done, total and late. */
+  progress: { done: number; total: number; late: number };
+}
+
+/** A task with subtasks: its effort lives in the subtasks, so capacity counts those instead. */
+export function countsForCapacity(r: BoardRow): boolean {
+  return r.subtasks.length === 0;
 }
 
 export function eventsByDeliverable(events: StatusEvent[]): Map<string, StatusEvent[]> {
@@ -39,7 +50,8 @@ export function boardRows(data: Dataset, today: IsoDate, now: Date): BoardRow[] 
   const types = new Map(data.deliverableTypes.map((t) => [t.code, t]));
   const team = new Map(data.team.map((t) => [t.id, t]));
   const events = eventsByDeliverable(data.statusEvents);
-  return data.deliverables.map((d) => {
+  const titles = new Map(data.deliverables.map((d) => [d.id, d.title]));
+  const rows: BoardRow[] = data.deliverables.map((d) => {
     const statusSince = statusChangedAt(events.get(d.id) ?? []);
     return {
       ...d,
@@ -48,8 +60,24 @@ export function boardRows(data: Dataset, today: IsoDate, now: Date): BoardRow[] 
       owner: d.owner_id ? team.get(d.owner_id) ?? null : null,
       statusSince,
       flags: flagsFor(d, statusSince, today, now),
+      subtasks: [],
+      parent: d.parent_id && titles.has(d.parent_id) ? { id: d.parent_id, title: titles.get(d.parent_id)! } : null,
+      progress: { done: 0, total: 0, late: 0 },
     };
   });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  for (const r of rows) {
+    const parent = r.parent_id ? byId.get(r.parent_id) : null;
+    if (!parent) continue;
+    parent.subtasks.push(r);
+    parent.progress.total += 1;
+    if (isDone(r.status)) parent.progress.done += 1;
+    if (r.flags.overdue) parent.progress.late += 1;
+  }
+  for (const r of rows) {
+    if (r.subtasks.length > 1) r.subtasks.sort((a, b) => a.sort_order - b.sort_order || a.due_date.localeCompare(b.due_date) || a.created_at.localeCompare(b.created_at));
+  }
+  return rows;
 }
 
 const byDue = (a: BoardRow, b: BoardRow) => a.due_date.localeCompare(b.due_date) || a.title.localeCompare(b.title);
@@ -238,7 +266,7 @@ export function pulse(rows: BoardRow[], data: Dataset, range: Range, today: IsoD
     .map((member) => ({
       member,
       booked: rows
-        .filter((r) => r.owner_id === member.id && r.due_date >= thisWeek[0] && r.due_date <= thisWeek[6])
+        .filter((r) => r.owner_id === member.id && countsForCapacity(r) && r.due_date >= thisWeek[0] && r.due_date <= thisWeek[6])
         .reduce((n, r) => n + r.effort_points, 0),
       available: member.weekly_capacity_points,
     }))

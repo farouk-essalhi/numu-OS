@@ -10,7 +10,7 @@ import { cn, firstName, PLATFORM_LABEL } from "@/lib/format";
 import type { BoardRow } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import type { DeliverableStatus, IsoDate } from "@/lib/types";
-import { canMove, flowFor, nextStatus, STATUS_META, statusIndex } from "@/lib/workflow";
+import { canMove, flowFor, isTaskType, nextStatus, STATUS_META, statusIndex } from "@/lib/workflow";
 import { Avatar, Empty, Pill, StatusPill } from "./ui";
 
 export function FlagPills({ row, today }: { row: BoardRow; today: IsoDate }) {
@@ -40,7 +40,10 @@ export function FlagPills({ row, today }: { row: BoardRow; today: IsoDate }) {
 }
 
 function typeLine(row: BoardRow) {
-  return [row.type.name_en, row.platform ? PLATFORM_LABEL[row.platform] : null].filter(Boolean).join(" · ");
+  // Subtasks say what they're part of; big tasks say how far along they are.
+  if (row.parent) return `↳ ${row.parent.title}`;
+  const base = [row.type.name_en, row.platform ? PLATFORM_LABEL[row.platform] : null].filter(Boolean).join(" · ");
+  return row.progress.total ? `${base} · ${row.progress.done}/${row.progress.total} subtasks` : base;
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +390,8 @@ function SortHeader({
 export function QuickMove({ row }: { row: BoardRow }) {
   const { me, move } = useNumu();
   const [error, setError] = useState<string | null>(null);
-  const next = nextStatus(row.deliverable_type, row.status);
+  // Tasks: one tap ticks them off (In progress is on the task page).
+  const next = isTaskType(row.deliverable_type) ? (row.status === "done" ? null : "done") : nextStatus(row.deliverable_type, row.status);
   if (!next) return null;
   const check = canMove(me, row.status, next, row.deliverable_type);
   if (!check.ok) return null;

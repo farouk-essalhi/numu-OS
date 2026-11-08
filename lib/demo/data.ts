@@ -278,6 +278,8 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
             post_url: null,
             posted_at: null,
             created_at: at(addDays(month, -6), 9),
+            parent_id: null,
+            sort_order: 0,
           };
           moveAlong(d, today);
           deliverables.push(d);
@@ -299,6 +301,18 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
       currency: "QAR",
       start_date: addDays(today, -10),
       deadline: addDays(today, 25),
+      notes: null,
+    },
+    {
+      id: "pj-sidra-web",
+      client_id: "cl-sidra",
+      name_en: "Website rebuild",
+      name_ar: "إعادة بناء الموقع",
+      status: "active",
+      fixed_fee_minor: 4_000_000,
+      currency: "QAR",
+      start_date: addDays(today, -12),
+      deadline: addDays(today, 18),
       notes: null,
     },
   ];
@@ -334,10 +348,60 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
       post_url: null,
       posted_at: null,
       created_at: at(addDays(today, -10), 11),
+      parent_id: null,
+      sort_order: 0,
     };
     deliverables.push(d);
     pushEvents(d, historyFor(d));
   });
+
+  // A big task broken into subtasks, each with its own owner, date and step.
+  const task = (id: string, title: string, owner: string, inDays: number, status: DeliverableStatus, parent: string | null, order: number): Deliverable => {
+    const due = addDays(today, inDays);
+    return {
+      id,
+      client_id: "cl-sidra",
+      retainer_id: null,
+      scope_line_id: null,
+      project_id: "pj-sidra-web",
+      deliverable_type: "task",
+      title,
+      month: monthStart(due),
+      seq: null,
+      platform: null,
+      owner_id: owner,
+      due_date: due,
+      post_date: null,
+      status,
+      revision_count: 0,
+      effort_points: 1,
+      script_url: null,
+      raw_url: null,
+      final_url: null,
+      post_url: null,
+      posted_at: null,
+      created_at: at(addDays(today, -12), 10),
+      parent_id: parent,
+      sort_order: order,
+    };
+  };
+  const web = task("dl-sidra-web", "Website rebuild", "tm-rand", 18, "in_progress", null, 0);
+  const webSteps: [string, string, number, DeliverableStatus][] = [
+    ["Sitemap and page list", "tm-rand", -8, "done"],
+    ["Moodboard and look", "tm-ruba", -5, "done"],
+    ["Homepage design", "tm-ruba", 2, "in_progress"],
+    ["Product pages design", "tm-ruba", 6, "planned"],
+    ["Copywriting (English)", "tm-rand", 3, "in_progress"],
+    ["Copywriting (Arabic)", "tm-anas", 5, "planned"],
+    ["Photography selects", "tm-khaled", -1, "planned"],
+    ["Build the site", "tm-busafen", 12, "planned"],
+    ["QA on phones", "tm-busafen", 15, "planned"],
+    ["Launch and handover", "tm-rand", 18, "planned"],
+  ];
+  for (const d of [web, ...webSteps.map(([t, o, n, s], i) => task(`dl-sidra-web-${i + 1}`, t, o, n, s, web.id, i + 1))]) {
+    deliverables.push(d);
+    pushEvents(d, historyFor(d));
+  }
 
   // Make sure the board shows both flags from the spec.
   const nearToday = (d: Deliverable) => Math.abs(new Date(d.due_date).getTime() - new Date(today).getTime());
@@ -401,8 +465,8 @@ export function buildDemoDataset(today: IsoDate, now: Date): Dataset {
 function moveAlong(d: Deliverable, today: IsoDate) {
   const rand = seeded(d.id);
   if (isTaskType(d.deliverable_type)) {
-    // Tasks: done once their day has passed, with the odd one forgotten.
-    d.status = d.due_date < today && rand() > 0.08 ? "done" : "planned";
+    // Tasks: done once their day has passed (the odd one forgotten), being worked on when close.
+    d.status = d.due_date < today ? (rand() > 0.08 ? "done" : "planned") : d.due_date <= addDays(today, 3) ? "in_progress" : "planned";
     return;
   }
   const r1 = rand();

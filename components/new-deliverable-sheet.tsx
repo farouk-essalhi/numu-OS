@@ -89,6 +89,7 @@ function Form({ onDone }: { onDone: () => void }) {
     clients.some((c) => c.id === last.clientId) ? last.clientId! : (clients[0]?.id ?? ""),
   );
   const [projectId, setProjectId] = useState("");
+  const [parentId, setParentId] = useState("");
   const [type, setType] = useState<DeliverableTypeCode>(() => {
     const k = last.kind === "content" && canPlan(role) ? "content" : "task";
     const remembered = k === "task" ? last.taskType : last.contentType;
@@ -114,7 +115,12 @@ function Form({ onDone }: { onDone: () => void }) {
   const fallbackTitle = isTask ? typeName : `${typeName}${platform ? ` · ${PLATFORM_LABEL[platform]}` : ""}`;
   // Content and repeating tasks hang off retainers and scope, which only leads and partners manage.
   const plans = canPlan(role);
-  const canRepeat = plans && isTask && !projectId && Boolean(retainer);
+  const canRepeat = plans && isTask && !projectId && !parentId && Boolean(retainer);
+  // Open tasks of this client that this one could be a step of.
+  const taskCodes = new Set(taskTypes.map((t) => t.code));
+  const parents = data.deliverables
+    .filter((d) => d.client_id === clientId && !d.parent_id && d.status !== "done" && taskCodes.has(d.deliverable_type))
+    .sort((a, b) => a.due_date.localeCompare(b.due_date));
 
   function switchKind(k: Kind) {
     setKind(k);
@@ -147,6 +153,8 @@ function Form({ onDone }: { onDone: () => void }) {
     const result = create({
       client_id: clientId,
       project_id: projectId || null,
+      parent_id: isTask && parentId ? parentId : null,
+      sort_order: parentId ? data.deliverables.filter((d) => d.parent_id === parentId).length + 1 : 0,
       retainer_id: scopeLineId ? retainer!.id : null,
       scope_line_id: scopeLineId,
       deliverable_type: type,
@@ -216,6 +224,7 @@ function Form({ onDone }: { onDone: () => void }) {
               onChange={(e) => {
                 setClientId(e.target.value);
                 setProjectId("");
+                setParentId("");
                 setRepeat(false);
                 const c = data.clients.find((x) => x.id === e.target.value);
                 if (!isTask && c?.account_lead_id) setOwnerId(c.account_lead_id);
@@ -241,11 +250,13 @@ function Form({ onDone }: { onDone: () => void }) {
           <Field label={isTask ? "Campaign" : "Counts against"}>
             <select
               value={projectId}
+              disabled={Boolean(isTask && parentId)}
+              title={isTask && parentId ? "A subtask belongs to its task's campaign" : undefined}
               onChange={(e) => {
                 setProjectId(e.target.value);
                 if (e.target.value) setRepeat(false);
               }}
-              className={control}
+              className={cn(control, "disabled:opacity-50")}
             >
               <option value="">{isTask ? "None" : "Retainer (extra)"}</option>
               {projects.map((p) => (
@@ -273,6 +284,28 @@ function Form({ onDone }: { onDone: () => void }) {
           </Field>
           {!isTask ? <OwnerField value={ownerId} onChange={setOwnerId} /> : null}
         </div>
+        {isTask && parents.length ? (
+          <Field label="Subtask of" hint={parentId ? "It shows inside that task, and in its owner's My work." : "Optional: make it a step of a bigger task."}>
+            <select
+              value={parentId}
+              onChange={(e) => {
+                setParentId(e.target.value);
+                if (e.target.value) {
+                  setRepeat(false);
+                  setProjectId("");
+                }
+              }}
+              className={control}
+            >
+              <option value="">Nothing (a task on its own)</option>
+              {parents.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
         {isTask ? (
           <Check
             checked={repeat}
@@ -284,6 +317,8 @@ function Form({ onDone }: { onDone: () => void }) {
                 ? `Adds it to ${client?.name_en ?? "the client"}'s monthly scope, so it's created with the rest of each month (moved to the next working day when needed).`
                 : !plans
                   ? "Partners and account leads set up repeating tasks."
+                  : parentId
+                    ? "Subtasks don't repeat; the bigger task can."
                   : projectId
                     ? "Campaign tasks don't repeat."
                     : "Needs an active retainer for this client."

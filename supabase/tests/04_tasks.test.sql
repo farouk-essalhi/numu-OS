@@ -76,7 +76,7 @@ select throws_ok(
 -- ---------------------------------------------------------------------------
 select throws_ok(
   $$ update public.deliverables set status = 'editing' where id = '99999999-4000-4000-8000-000000000001' $$,
-  '23514', 'A task is either to do (Planned) or Done',
+  '23514', 'A task is To do, In progress or Done',
   'a task can''t go into production steps'
 );
 

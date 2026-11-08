@@ -83,6 +83,8 @@ Arabic labels need a check by a native speaker on the team.
 | 9 | `posted` | Posted | منشور | Post link added; `posted_at` stamped |
 | 10 | `done` | Done | تم | Tasks only (not content) |
 
+`in_progress` (In progress, قيد التنفيذ) sits between `planned` and `scripting` in the enum and is for tasks only: a task is To do → In progress → Done.
+
 The enum is in this order, so `status < 'client_review'` means "still with the team".
 
 **Rules (trigger-enforced):**
@@ -211,6 +213,8 @@ Every piece of work. The production board.
 | effort_points | smallint | Defaults from the type; can be raised for a heavy item |
 | script_url, raw_url, final_url, post_url | text | Drive / live links |
 | posted_at | timestamptz | Trigger-maintained |
+| parent_id | uuid → deliverables | Makes it a subtask (one level, tasks only). Client, retainer and campaign copied from the parent; deleted with it |
+| sort_order | integer | Order among its parent's subtasks |
 
 Unique `(scope_line_id, month, seq)` makes the generator idempotent.
 

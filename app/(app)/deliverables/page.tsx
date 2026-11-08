@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckSquare, ChevronLeft, ChevronRight, Columns3, List, LoaderCircle, Search, Trash2, X } from "lucide-react";
+import { CheckSquare, ChevronLeft, ChevronRight, Columns3, List, ListTree, LoaderCircle, Search, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { KanbanBoard, type BoardColumn, type DropCheck } from "@/components/board";
 import { DeliverableTable, type Selection } from "@/components/deliverables";
@@ -13,7 +13,7 @@ import { planningWeek } from "@/lib/selectors";
 import { canPlan, useNumu } from "@/lib/store";
 import type { DeliverableStatus } from "@/lib/types";
 import type { BoardRow } from "@/lib/selectors";
-import { canMove, isWithTeam, STATUSES, STATUS_META } from "@/lib/workflow";
+import { canMove, isDone, isWithTeam, STATUSES, STATUS_META } from "@/lib/workflow";
 
 type View = "board" | "list";
 type Group = "status" | "client" | "person";
@@ -33,6 +33,21 @@ export default function DeliverablesPage() {
   const [owner, setOwner] = useState(params.get("owner") === "me" ? me.id : params.get("owner") ?? "");
   const [type, setType] = useState("");
   const [status, setStatus] = useState(params.get("status") ?? "");
+  const [showSubtasks, setShowSubtasks] = useState(() => {
+    try {
+      return localStorage.getItem("numu.tasks.subtasks") === "1";
+    } catch {
+      return false;
+    }
+  });
+  function toggleSubtasks() {
+    setShowSubtasks((v) => {
+      try {
+        localStorage.setItem("numu.tasks.subtasks", v ? "0" : "1");
+      } catch {}
+      return !v;
+    });
+  }
   const project = params.get("project") ?? "";
 
   // Select mode: tick tasks on the board or the list, then delete them together.
@@ -96,6 +111,8 @@ export default function DeliverablesPage() {
       .filter((r) => !project || r.project_id === project)
       .filter((r) => !client || r.client_id === client)
       .filter((r) => !owner || r.owner_id === owner)
+      // Subtasks live inside their big task unless asked for (or someone's own work is filtered).
+      .filter((r) => !r.parent_id || showSubtasks || Boolean(owner))
       .filter((r) => !type || r.deliverable_type === type)
       .filter((r) => !status || r.status === status)
       .filter(
@@ -106,7 +123,7 @@ export default function DeliverablesPage() {
           (r.owner?.full_name.toLowerCase().includes(needle) ?? false),
       )
       .sort((a, b) => a.due_date.localeCompare(b.due_date));
-  }, [rows, month, planningMonth, project, client, owner, type, status, q]);
+  }, [rows, month, planningMonth, project, client, owner, type, status, q, showSubtasks]);
 
   const columns: BoardColumn[] = useMemo(() => {
     if (group === "status") {
@@ -140,6 +157,8 @@ export default function DeliverablesPage() {
       const check = canMove(me, row.status, to as DeliverableStatus, row.deliverable_type);
       if (!check.ok) return check;
       if (to === "scheduled" && !row.post_date) return { ok: false, reason: "Set a post date first: open the card and add it" };
+      const open = row.subtasks.filter((s) => !isDone(s.status)).length;
+      if (to === "done" && open) return { ok: false, reason: `${open} of its subtasks ${open === 1 ? "is" : "are"} still open. Open the task to finish them` };
       return { ok: true };
     },
     [group, me],
@@ -248,9 +267,17 @@ export default function DeliverablesPage() {
             </Button>
           ) : null}
         </div>
+        <Button
+          variant={showSubtasks ? "primary" : "secondary"}
+          onClick={toggleSubtasks}
+          aria-pressed={showSubtasks}
+          title={showSubtasks ? "Subtasks show as their own cards" : "Subtasks are inside their task"}
+          className="sm:ml-auto"
+        >
+          <ListTree /> Subtasks {showSubtasks ? "shown" : "inside"}
+        </Button>
         {view === "board" ? (
           <Segmented
-            className="sm:ml-auto"
             value={group}
             onChange={setGroup}
             options={[

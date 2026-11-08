@@ -4,7 +4,7 @@
 
 import { addDays, monthStart, qatarDate, weekDays, workingDaysOfMonth } from "./dates";
 import { percent } from "./format";
-import { clientMonth, eventsByDeliverable, planningWeek, type BoardRow, type ClientMonth } from "./selectors";
+import { clientMonth, eventsByDeliverable, planningWeek, type BoardRow, type ClientMonth, countsForCapacity } from "./selectors";
 import type { Client, Dataset, DeliverableStatus, IsoDate, TeamMember } from "./types";
 import { isDone, isOnTime, isWithTeam, STATUS_META } from "./workflow";
 
@@ -86,7 +86,7 @@ export function weeklyOnTime(rows: BoardRow[], today: IsoDate, weeks: number) {
 export type Stage = "production" | "review" | "ready" | "live";
 
 export const STAGES: { key: Stage; label: string; statuses: DeliverableStatus[] }[] = [
-  { key: "production", label: "In production", statuses: ["planned", "scripting", "shooting", "editing"] },
+  { key: "production", label: "In production", statuses: ["planned", "in_progress", "scripting", "shooting", "editing"] },
   { key: "review", label: "In review", statuses: ["internal_review", "client_review"] },
   { key: "ready", label: "Approved", statuses: ["approved", "scheduled"] },
   { key: "live", label: "Live", statuses: ["posted", "done"] },
@@ -256,7 +256,8 @@ export function capacityWeek(rows: BoardRow[], data: Dataset, days: IsoDate[]): 
     .filter((m) => m.is_active && m.weekly_capacity_points > 0 && m.access_level !== "partner")
     .map((member) => {
       const mine = rows.filter((r) => r.owner_id === member.id);
-      const week = mine.filter((r) => r.due_date >= days[0] && r.due_date <= days[6]);
+      // A task with subtasks is booked through its subtasks, not twice.
+      const week = mine.filter((r) => countsForCapacity(r) && r.due_date >= days[0] && r.due_date <= days[6]);
       return {
         member,
         booked: week.reduce((n, r) => n + r.effort_points, 0),

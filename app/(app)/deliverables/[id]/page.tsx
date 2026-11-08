@@ -10,13 +10,15 @@ import { formatMonth, formatShort, qatarDate, timeAgo } from "@/lib/dates";
 import { cn, firstName, PLATFORM_LABEL } from "@/lib/format";
 import { useNumu, type DeliverablePatch } from "@/lib/store";
 import type { DeliverableStatus } from "@/lib/types";
-import { canMove, nextStatus, STATUSES, STATUS_META } from "@/lib/workflow";
+import { canMove, isDone, nextStatus, STATUSES, STATUS_META } from "@/lib/workflow";
+import { SubtasksCard } from "@/components/subtasks";
 
 export default function DeliverablePage() {
   const { id } = useParams<{ id: string }>();
   const { rows, data, me, role, today, now, move, update, comment } = useNumu();
   const row = rows.find((r) => r.id === id);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDone, setConfirmDone] = useState(false);
   const [draft, setDraft] = useState("");
   const [nowMs] = useState(() => now.getTime());
 
@@ -48,9 +50,19 @@ export default function DeliverablePage() {
   const project = row.project_id ? data.projects.find((p) => p.id === row.project_id) : null;
   const isTask = !row.type.is_content;
 
+  const openSubtasks = row.subtasks.filter((s) => !isDone(s.status));
   function go(to: DeliverableStatus) {
+    // Closing a task that still has open subtasks: ask what to do with them.
+    if (to === "done" && openSubtasks.length && !confirmDone) return setConfirmDone(true);
     const res = move(row!.id, to);
     setError(res.ok ? null : res.reason);
+    setConfirmDone(false);
+  }
+  function closeAll() {
+    for (const s of openSubtasks) move(s.id, "done");
+    const res = move(row!.id, "done");
+    setError(res.ok ? null : res.reason);
+    setConfirmDone(false);
   }
   function patch(p: DeliverablePatch) {
     update(row!.id, p);
@@ -67,6 +79,14 @@ export default function DeliverablePage() {
         <Link href={`/clients/${row.client_id}`} className="truncate hover:text-ink">
           {row.client.name_en}
         </Link>
+        {row.parent ? (
+          <>
+            <ChevronRight className="size-3.5" />
+            <Link href={`/deliverables/${row.parent.id}`} className="truncate hover:text-ink">
+              {row.parent.title}
+            </Link>
+          </>
+        ) : null}
       </nav>
 
       <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -75,8 +95,16 @@ export default function DeliverablePage() {
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             <OwnerChip ownerId={row.owner_id} onChange={(owner_id) => patch({ owner_id })} />
             <StatusPill status={row.status} />
-            <Pill>{row.type.name_en}</Pill>
+            {row.deliverable_type === "task" ? null : <Pill>{row.type.name_en}</Pill>}
             {row.platform ? <Pill>{PLATFORM_LABEL[row.platform]}</Pill> : null}
+            {row.parent ? (
+              <Link
+                href={`/deliverables/${row.parent.id}`}
+                className="inline-flex h-6 items-center gap-1 rounded-md border border-line bg-surface px-2 text-[12px] font-medium text-ink-2 hover:border-line-strong"
+              >
+                ↳ Subtask of {row.parent.title}
+              </Link>
+            ) : null}
             {project ? <Pill tone="info">{project.name_en}</Pill> : null}
             {row.type.is_content && row.retainer_id && !row.scope_line_id ? <Pill tone="info">Extra outside scope</Pill> : null}
             {!row.type.is_content && row.scope_line_id ? <Pill>Repeats monthly</Pill> : null}
@@ -119,17 +147,21 @@ export default function DeliverablePage() {
                 </Button>
               ) : null}
             </>
+          ) : isTask && row.status !== "done" ? (
+            // Tasks: start it, or tick it straight off.
+            <>
+              {row.status === "planned" ? (
+                <Button onClick={() => go("in_progress")}>
+                  <ArrowRight /> Start
+                </Button>
+              ) : null}
+              <Button variant="primary" onClick={() => go("done")}>
+                <Check /> Mark done
+              </Button>
+            </>
           ) : next && nextOk?.ok ? (
             <Button variant="primary" onClick={() => go(next)}>
-              {next === "done" ? (
-                <>
-                  <Check /> Mark done
-                </>
-              ) : (
-                <>
-                  {STATUS_META[next].en} <ArrowRight />
-                </>
-              )}
+              {STATUS_META[next].en} <ArrowRight />
             </Button>
           ) : isTask && row.status === "done" ? (
             <Button onClick={() => go("planned")}>
@@ -142,6 +174,22 @@ export default function DeliverablePage() {
       </div>
 
       {error ? <p className="-mt-2 mb-4 rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-critical">{error}</p> : null}
+      {confirmDone ? (
+        <div className="toast-in -mt-2 mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-line bg-surface px-4 py-3 shadow-sm">
+          <span className="flex-1 text-[13.5px]">
+            {openSubtasks.length} {openSubtasks.length === 1 ? "subtask is" : "subtasks are"} still open.
+          </span>
+          <Button size="sm" onClick={() => setConfirmDone(false)}>
+            Cancel
+          </Button>
+          <Button size="sm" onClick={() => go("done")}>
+            Just this task
+          </Button>
+          <Button size="sm" variant="primary" onClick={closeAll}>
+            <Check /> Mark all done
+          </Button>
+        </div>
+      ) : null}
 
       <Card className="mb-4 px-4 py-3 sm:px-5">
         <StatusStepper status={row.status} type={row.deliverable_type} />
@@ -149,6 +197,7 @@ export default function DeliverablePage() {
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
+          {row.parent_id ? null : <SubtasksCard row={row} />}
           <Card>
             <CardHeader title={isTask ? "Link" : "Files and links"} subtitle="Google Drive stays the file store; NUMU OS keeps the links." />
             <ul className="divide-y divide-line border-t border-line">

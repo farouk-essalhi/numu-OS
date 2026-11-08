@@ -27,7 +27,7 @@ import { cn, PLATFORM_LABEL } from "@/lib/format";
 import type { BoardRow } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import type { IsoDate } from "@/lib/types";
-import { flowFor, STATUS_META, statusIndex } from "@/lib/workflow";
+import { flowFor, isDone, STATUS_META, statusIndex } from "@/lib/workflow";
 import { FlagPills, type Selection } from "./deliverables";
 import { Avatar, Empty } from "./ui";
 
@@ -812,18 +812,20 @@ function CardBody({
         )}
       </div>
       <p className="mt-1 truncate text-[12px] text-muted">
-        {hideClient
+        {row.parent
+          ? `↳ ${row.parent.title}`
+          : hideClient
           ? [
               row.type.name_en,
               row.platform ? PLATFORM_LABEL[row.platform] : null,
             ]
               .filter(Boolean)
               .join(" · ")
-          : row.type.is_content || row.title.startsWith(row.type.name_en)
+          : row.type.is_content || row.deliverable_type === "task" || row.title.startsWith(row.type.name_en)
             ? row.client.name_en
             : `${row.client.name_en} · ${row.type.name_en}`}
       </p>
-      <Steps row={row} />
+      {row.progress.total ? <SubtaskProgress row={row} /> : <Steps row={row} />}
       <div className="mt-2 flex flex-wrap items-center gap-1.5">
         <span
           className={cn(
@@ -894,6 +896,40 @@ function EdgeFade({ side, show, onClick }: { side: "left" | "right"; show: boole
       >
         {side === "left" ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
       </button>
+    </div>
+  );
+}
+
+/** On a big task's card: how many subtasks are done, and who still has some. */
+function SubtaskProgress({ row }: { row: BoardRow }) {
+  const { done, total, late } = row.progress;
+  const owners = [...new Set(row.subtasks.filter((s) => !isDone(s.status) && s.owner).map((s) => s.owner!.full_name))];
+  return (
+    <div className="mt-2.5">
+      <div className="flex items-center gap-2">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3">
+          <div
+            className="h-full rounded-full transition-[width] duration-500"
+            style={{ width: `${(done / total) * 100}%`, background: late ? "var(--serious)" : "var(--good)" }}
+          />
+        </div>
+        <span className="text-[11.5px] font-medium text-ink-2 num">
+          {done}/{total}
+        </span>
+      </div>
+      {owners.length ? (
+        <div className="mt-2 flex items-center gap-1.5">
+          <span className="flex -space-x-1.5">
+            {owners.slice(0, 4).map((n) => (
+              <Avatar key={n} name={n} size={20} />
+            ))}
+          </span>
+          <span className="text-[11.5px] text-muted">
+            {owners.length > 4 ? `+${owners.length - 4} · ` : ""}
+            {total - done} open{late ? ` · ${late} late` : ""}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

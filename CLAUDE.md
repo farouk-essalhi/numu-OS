@@ -67,7 +67,7 @@ Reel 3 · Static post 1 · Carousel 2 · Story set 1 · Long video 5 · Shoot da
 
 **Nine statuses**, in order: Planned → Scripting → Shooting → Editing → Internal review → Client review → Approved → Scheduled → Posted. Cards may skip steps (a static post has no shoot).
 
-**Tasks** (decision 39): not all work is content. Follow-ups, reports, content calendars, meetings and other tasks are rows in the same `deliverables` table with a non-content type (`deliverable_types.is_content = false`): they are Planned (to do) or **Done** (a tenth status, tasks only), can belong to just a client, and stay out of content metrics. In the app everything is a "task" ("New task", the Tasks board); content tasks are "deliverables". Recurring tasks are scope lines (e.g. 1 Report a month, `due_day` 3), generated with the month.
+**Tasks** (decision 39): not all work is content. Follow-ups, reports, content calendars, meetings and other tasks are rows in the same `deliverables` table with a non-content type (`deliverable_types.is_content = false`): they are To do (Planned), **In progress** or **Done** (statuses for tasks only), can belong to just a client, and stay out of content metrics. **Subtasks** (decision 49): a task can be broken into subtasks (`deliverables.parent_id`, one level, tasks only), each with its own owner, date and step; they take the parent's client and campaign and are deleted with it. In the app everything is a "task" ("New task", the Tasks board); content tasks are "deliverables". Recurring tasks are scope lines (e.g. 1 Report a month, `due_day` 3), generated with the month.
 
 Rules, enforced in the database (not just the UI):
 - **Permissions per person** (decision 43, Team → Permissions, partners edit): `can_approve` marks work **Approved** (default partners); `can_send_to_client` moves work **into or out of Client review** (default partners and account leads); `can_create_tasks` adds and assigns work (default everyone). Checked by the workflow trigger and RLS, mirrored in `canMove()`.
@@ -75,7 +75,8 @@ Rules, enforced in the database (not just the UI):
 - **Scheduled needs a post date.** Marking **Posted** stamps `posted_at`.
 - Every status change writes a `status_events` row (trigger only, the app never writes history).
 - A deliverable belongs to exactly **one retainer or one project**. A retainer deliverable with no scope line is an **extra outside scope**. A task needs a client and at most one of the two.
-- Tasks are only Planned or Done; content is never Done.
+- Tasks are only Planned, In progress or Done; content never uses In progress or Done.
+- Subtasks: one level only, always tasks, always the parent's client/retainer/campaign (trigger `deliverables_05_parent`).
 
 Flags: **2+ revisions**; **in Client review for more than 48 hours**; **overdue** = still before Client review after the due date, or approved/scheduled but not posted after the post date.
 

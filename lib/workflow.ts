@@ -13,6 +13,7 @@ import type {
 
 export const STATUSES: DeliverableStatus[] = [
   "planned",
+  "in_progress",
   "scripting",
   "shooting",
   "editing",
@@ -27,6 +28,7 @@ export const STATUSES: DeliverableStatus[] = [
 /** Identity colour per status (a dot beside the label, never colour alone). */
 export const STATUS_META: Record<DeliverableStatus, { en: string; ar: string; color: string }> = {
   planned:         { en: "Planned",         ar: "مخطط",            color: "var(--faint)" },
+  in_progress:     { en: "In progress",     ar: "قيد التنفيذ",     color: "var(--series-1)" },
   scripting:       { en: "Scripting",       ar: "كتابة السيناريو", color: "var(--series-7)" },
   shooting:        { en: "Shooting",        ar: "تصوير",           color: "var(--series-4)" },
   editing:         { en: "Editing",         ar: "مونتاج",          color: "var(--series-1)" },
@@ -52,8 +54,8 @@ export function isDone(status: DeliverableStatus): boolean {
   return statusIndex(status) >= statusIndex("approved");
 }
 
-const TASK_FLOW: DeliverableStatus[] = ["planned", "done"];
-const CONTENT_FLOW: DeliverableStatus[] = STATUSES.filter((s) => s !== "done");
+const TASK_FLOW: DeliverableStatus[] = ["planned", "in_progress", "done"];
+const CONTENT_FLOW: DeliverableStatus[] = STATUSES.filter((s) => s !== "done" && s !== "in_progress");
 
 /** The usual path for each type. Other moves are allowed; this drives "Next". */
 const FLOW: Record<DeliverableTypeCode, DeliverableStatus[]> = {
@@ -105,11 +107,11 @@ export type Perms = { can_approve: boolean; can_send_to_client: boolean };
  */
 export function canMove(who: Perms, from: DeliverableStatus, to: DeliverableStatus, type?: DeliverableTypeCode): MoveCheck {
   if (from === to) return { ok: false, reason: "Already there" };
-  if (type && isTaskType(type) && to !== "planned" && to !== "done") {
-    return { ok: false, reason: "A task is either to do or done" };
+  if (type && isTaskType(type) && !TASK_FLOW.includes(to)) {
+    return { ok: false, reason: "A task is To do, In progress or Done" };
   }
-  if (type && !isTaskType(type) && to === "done") {
-    return { ok: false, reason: "Content goes through review and ends at Posted" };
+  if (type && !isTaskType(type) && (to === "done" || to === "in_progress")) {
+    return { ok: false, reason: "Content goes through its own steps and ends at Posted" };
   }
   if (to === "approved") {
     if (!who.can_approve) return { ok: false, reason: "Approving needs permission (Team → Permissions)" };

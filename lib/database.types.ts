@@ -8,6 +8,7 @@ type Enums = {
   client_status: "active" | "paused" | "ended";
   deliverable_status:
     | "planned"
+    | "in_progress"
     | "scripting"
     | "shooting"
     | "editing"
@@ -168,6 +169,8 @@ export type Database = {
           final_url: string | null;
           post_url: string | null;
           posted_at: string | null;
+          parent_id: string | null;
+          sort_order: number;
         } & Stamps,
         | "id"
         | "retainer_id"
@@ -184,6 +187,8 @@ export type Database = {
         | "final_url"
         | "post_url"
         | "posted_at"
+        | "parent_id"
+        | "sort_order"
         | keyof Stamps
       >;
       status_events: {

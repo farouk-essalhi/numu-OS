@@ -72,6 +72,8 @@ export function generateMonth(
           post_url: null,
           posted_at: null,
           created_at: now,
+          parent_id: null,
+          sort_order: 0,
         });
         events.push({
           deliverable_id: id,

@@ -1,0 +1,11 @@
+-- NUMU OS · 11 · An "In progress" step for tasks
+--
+-- Tasks were To do (Planned) or Done. Bigger tasks and subtasks ("Homepage
+-- design" for a website build) take days, so partners want to see what is
+-- actually being worked on: To do → In progress → Done. Content keeps its
+-- own nine steps and never uses this one (see 20261108160100_subtasks.sql).
+--
+-- Its own migration: a new enum value can't be used in the transaction that
+-- adds it. It sorts right after 'planned', so it counts as "still with the
+-- team" (before Client review) and late work in progress is flagged overdue.
+alter type public.deliverable_status add value if not exists 'in_progress' after 'planned';
