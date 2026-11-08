@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronLeft, ChevronRight, Columns3, List, Search, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { CheckSquare, ChevronLeft, ChevronRight, Columns3, List, LoaderCircle, Search, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { KanbanBoard, type BoardColumn, type DropCheck } from "@/components/board";
-import { DeliverableTable } from "@/components/deliverables";
+import { DeliverableTable, type Selection } from "@/components/deliverables";
 import { Button, ButtonLink, Card, Empty, IconButton, PageHeader, Segmented, SelectFilter } from "@/components/ui";
 import { addMonths, formatMonth, monthStart } from "@/lib/dates";
 import { useMediaQuery } from "@/lib/hooks";
 import { planningWeek } from "@/lib/selectors";
-import { useNumu } from "@/lib/store";
+import { canPlan, useNumu } from "@/lib/store";
 import type { DeliverableStatus } from "@/lib/types";
 import type { BoardRow } from "@/lib/selectors";
 import { canMove, isWithTeam, STATUSES, STATUS_META } from "@/lib/workflow";
@@ -19,7 +19,7 @@ type View = "board" | "list";
 type Group = "status" | "client" | "person";
 
 export default function DeliverablesPage() {
-  const { rows, data, me, role, today, move, update } = useNumu();
+  const { rows, data, me, role, today, move, update, removeMany, notify } = useNumu();
   const params = useSearchParams();
   const router = useRouter();
   const desktop = useMediaQuery("(min-width: 768px)");
@@ -34,6 +34,54 @@ export default function DeliverablesPage() {
   const [type, setType] = useState("");
   const [status, setStatus] = useState(params.get("status") ?? "");
   const project = params.get("project") ?? "";
+
+  // Select mode: tick tasks on the board or the list, then delete them together.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(() => new Set());
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const selection: Selection = useMemo(
+    () => ({
+      ids: picked,
+      toggle: (id) =>
+        setPicked((p) => {
+          const n = new Set(p);
+          if (n.has(id)) n.delete(id);
+          else n.add(id);
+          return n;
+        }),
+      setMany: (ids, on) =>
+        setPicked((p) => {
+          const n = new Set(p);
+          for (const id of ids) {
+            if (on) n.add(id);
+            else n.delete(id);
+          }
+          return n;
+        }),
+    }),
+    [picked],
+  );
+  function stopSelecting() {
+    setSelecting(false);
+    setPicked(new Set());
+    setConfirming(false);
+  }
+  useEffect(() => {
+    if (!selecting) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && stopSelecting();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selecting]);
+  const pickedIds = [...picked].filter((id) => rows.some((r) => r.id === id));
+  async function deletePicked() {
+    setDeleting(true);
+    const r = await removeMany(pickedIds);
+    setDeleting(false);
+    if (!r.ok) return notify(r.reason, "error");
+    notify(`Deleted ${pickedIds.length} ${pickedIds.length === 1 ? "task" : "tasks"}`, "success");
+    stopSelecting();
+  }
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -127,6 +175,17 @@ export default function DeliverablesPage() {
         subtitle={projectName ? `${projectName} · ${visible.length} tasks` : `${visible.length} in ${formatMonth(month)}${month === planningMonth ? ", plus anything unfinished from before" : ""}`}
         actions={
           <>
+            {canPlan(role) && rows.length > 0 ? (
+              selecting ? (
+                <Button onClick={stopSelecting}>
+                  <X /> Done selecting
+                </Button>
+              ) : (
+                <Button onClick={() => setSelecting(true)} title="Select tasks to delete">
+                  <CheckSquare /> Select
+                </Button>
+              )
+            ) : null}
             {!project ? (
               <div className="flex items-center rounded-lg border border-line bg-surface shadow-sm">
                 <IconButton label="Previous month" onClick={() => setMonth(addMonths(month, -1))} className="size-9">
@@ -230,8 +289,11 @@ export default function DeliverablesPage() {
             collapseEmpty={group !== "client"}
             canDrop={group === "client" ? undefined : canDrop}
             onDrop={onDrop}
+            selection={selecting ? selection : undefined}
           />
-          {group !== "client" ? (
+          {selecting ? (
+            <p className="mt-1 text-[12px] text-muted">Tap cards to select them. Esc to stop.</p>
+          ) : group !== "client" ? (
             <p className="mt-1 hidden text-[12px] text-muted md:block">
               Drag a card to {group === "status" ? "move it to another step" : "give it to someone else"}. On a phone, press and hold to pick it up.{" "}
               <Link href="/approvals" className="underline-offset-2 hover:underline">
@@ -243,9 +305,52 @@ export default function DeliverablesPage() {
         </>
       ) : (
         <Card className="overflow-hidden">
-          <DeliverableTable rows={visible} today={today} empty="Nothing matches these filters." />
+          <DeliverableTable rows={visible} today={today} empty="Nothing matches these filters." selection={selecting ? selection : undefined} />
         </Card>
       )}
+
+      {selecting ? (
+        <div className="toast-in fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4 md:bottom-6 md:pl-[68px] lg:pl-[248px]">
+          <div className="flex w-full max-w-[560px] flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface p-2 pl-4 shadow-lg">
+            <span className="text-[13.5px] font-medium num">
+              {pickedIds.length} selected
+            </span>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                const allIn = visible.length > 0 && visible.every((r) => picked.has(r.id));
+                selection.setMany(visible.map((r) => r.id), !allIn);
+                setConfirming(false);
+              }}
+            >
+              {visible.length > 0 && visible.every((r) => picked.has(r.id)) ? "Unselect all" : `Select all ${visible.length}`}
+            </Button>
+            <span className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {confirming ? (
+              <>
+                <span className="text-[12.5px] text-muted">Can&apos;t be undone.</span>
+                <Button size="sm" onClick={() => setConfirming(false)} disabled={deleting}>
+                  Keep
+                </Button>
+                <Button size="sm" variant="primary" className="bg-[var(--critical)] text-white" onClick={() => void deletePicked()} disabled={deleting}>
+                  {deleting ? <LoaderCircle className="animate-spin" /> : <Trash2 />} Delete {pickedIds.length}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button size="sm" onClick={stopSelecting}>
+                  Cancel
+                </Button>
+                <Button size="sm" variant="primary" onClick={() => setConfirming(true)} disabled={pickedIds.length === 0}>
+                  <Trash2 /> Delete
+                </Button>
+              </>
+            )}
+            </span>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

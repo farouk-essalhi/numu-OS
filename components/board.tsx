@@ -13,7 +13,7 @@
 // column changes.
 
 import Link from "next/link";
-import { Lock, UserRound } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Lock, UserRound } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -28,7 +28,7 @@ import type { BoardRow } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import type { IsoDate } from "@/lib/types";
 import { flowFor, STATUS_META, statusIndex } from "@/lib/workflow";
-import { FlagPills } from "./deliverables";
+import { FlagPills, type Selection } from "./deliverables";
 import { Avatar, Empty } from "./ui";
 
 export interface BoardColumn {
@@ -101,8 +101,9 @@ export function KanbanBoard({
   today,
   hideClient,
   collapseEmpty,
-  canDrop,
+  canDrop: canDropProp,
   onDrop,
+  selection,
 }: {
   columns: BoardColumn[];
   today: IsoDate;
@@ -112,8 +113,13 @@ export function KanbanBoard({
   /** Whether a card may go to a column. Without it, cards aren't draggable. */
   canDrop?: (row: BoardRow, to: string) => DropCheck;
   onDrop?: (row: BoardRow, to: string) => DropCheck;
+  /** Select mode: a tap picks the card (no dragging, no opening). */
+  selection?: Selection;
 }) {
   const { notify } = useNumu();
+  const canDrop = selection ? undefined : canDropProp;
+  // Is there more board to the left or right? (fades + arrows)
+  const [edges, setEdges] = useState({ left: false, right: false });
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [drag, setDrag] = useState<DragState | null>(null);
   const [landed, setLanded] = useState<{ id: string; to: string } | null>(null);
@@ -132,6 +138,30 @@ export function KanbanBoard({
   });
 
   useEffect(() => () => session.current?.cleanup(), []);
+
+  const hasBoard = columns.length > 0;
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const measure = () => {
+      const left = el.scrollLeft > 4;
+      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
+      setEdges((e) => (e.left === left && e.right === right ? e : { left, right }));
+    };
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    for (const child of Array.from(el.children)) ro.observe(child);
+    return () => {
+      el.removeEventListener("scroll", measure);
+      ro.disconnect();
+    };
+  }, [hasBoard, columns.length]);
+
+  function nudge(dir: -1 | 1) {
+    scrollRef.current?.scrollBy({ left: dir * 560, behavior: "smooth" });
+  }
 
   // Phones: once a card is picked up, the finger moves the card, not the page.
   // This listener must exist before the touch starts (and not be passive), or
@@ -482,10 +512,12 @@ export function KanbanBoard({
 
   return (
     <>
+      <div className="relative -mx-4 sm:mx-0">
       <div
         ref={scrollRef}
         className={cn(
-          "scroll-thin -mx-4 flex items-start gap-3 overflow-x-auto px-4 pb-4 sm:mx-0 sm:px-0",
+          "scroll-thin flex items-start gap-3 overflow-x-auto px-4 pb-4 sm:px-0",
+          selection && "selecting",
           !dragging && "snap-x snap-mandatory md:snap-none",
         )}
       >
@@ -622,14 +654,21 @@ export function KanbanBoard({
                               if (suppressClick.current) {
                                 e.preventDefault();
                                 suppressClick.current = false;
+                              } else if (selection) {
+                                e.preventDefault();
+                                selection.toggle(r.id);
                               }
                             }}
+                            aria-pressed={selection ? selection.ids.has(r.id) : undefined}
                             className={cn(
                               "board-card group relative block overflow-hidden rounded-lg border border-line bg-surface p-3 pl-3.5 shadow-sm select-none [-webkit-touch-callout:none]",
                               "transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-px hover:border-line-strong hover:shadow-md",
                               canDrop && "cursor-grab active:cursor-grabbing",
                               landed?.id === r.id ? "card-land" : "card-in",
                               isDragged && "card-hole",
+                              selection && "cursor-pointer",
+                              selection?.ids.has(r.id) &&
+                                "border-ink ring-2 ring-ink/15 hover:border-ink",
                             )}
                             style={
                               {
@@ -641,6 +680,21 @@ export function KanbanBoard({
                               } as CSSProperties
                             }
                           >
+                            {selection ? (
+                              <span
+                                aria-hidden
+                                className={cn(
+                                  "absolute top-2.5 right-2.5 z-10 grid size-[22px] place-items-center rounded-full border-[1.5px] transition-all duration-150",
+                                  selection.ids.has(r.id)
+                                    ? "scale-105 border-primary bg-primary text-primary-ink"
+                                    : "border-line-strong bg-surface",
+                                )}
+                              >
+                                {selection.ids.has(r.id) ? (
+                                  <Check className="size-3" strokeWidth={3} />
+                                ) : null}
+                              </span>
+                            ) : null}
                             <CardBody
                               row={r}
                               today={today}
@@ -679,6 +733,9 @@ export function KanbanBoard({
             </section>
           );
         })}
+      </div>
+        <EdgeFade side="left" show={edges.left} onClick={() => nudge(-1)} />
+        <EdgeFade side="right" show={edges.right} onClick={() => nudge(1)} />
       </div>
 
       {drag
@@ -744,11 +801,11 @@ function CardBody({
           {row.title}
         </p>
         {row.owner ? (
-          <Avatar name={row.owner.full_name} size={22} />
+          <Avatar name={row.owner.full_name} size={22} className="card-owner" />
         ) : (
           <span
             title="Unassigned"
-            className="grid size-[22px] shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-faint"
+            className="card-owner grid size-[22px] shrink-0 place-items-center rounded-full border border-dashed border-line-strong text-faint"
           >
             <UserRound className="size-3" />
           </span>
@@ -808,6 +865,35 @@ function Steps({ row }: { row: BoardRow }) {
           }}
         />
       ))}
+    </div>
+  );
+}
+
+/** A soft fade at a side of the board when there's more to scroll, with an arrow on desktop. */
+function EdgeFade({ side, show, onClick }: { side: "left" | "right"; show: boolean; onClick: () => void }) {
+  return (
+    <div
+      aria-hidden={!show}
+      className={cn(
+        "pointer-events-none absolute inset-y-0 z-10 w-12 transition-opacity duration-200",
+        side === "left" ? "left-0 bg-gradient-to-r" : "right-0 bg-gradient-to-l",
+        "from-[var(--bg)] to-transparent",
+        show ? "opacity-100" : "opacity-0",
+      )}
+    >
+      <button
+        type="button"
+        tabIndex={show ? 0 : -1}
+        onClick={onClick}
+        aria-label={side === "left" ? "Scroll the board left" : "Scroll the board right"}
+        className={cn(
+          "pointer-events-auto absolute top-3 hidden size-8 place-items-center rounded-full border border-line bg-surface text-ink-2 shadow-md transition-transform hover:scale-105 hover:text-ink md:grid",
+          side === "left" ? "left-1" : "right-1",
+          !show && "pointer-events-none",
+        )}
+      >
+        {side === "left" ? <ChevronLeft className="size-4" /> : <ChevronRight className="size-4" />}
+      </button>
     </div>
   );
 }

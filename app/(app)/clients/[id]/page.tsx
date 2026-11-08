@@ -395,6 +395,7 @@ function GenerateButtons({ retainer, clientActive }: { retainer: Retainer; clien
         ? `Created ${r.created} ${r.created === 1 ? "item" : "items"} for ${formatMonth(month)}`
         : `${formatMonth(month)} already has everything in scope`,
       r.created ? "success" : "info",
+      r.created ? { label: "View", href: "/deliverables" } : undefined,
     );
   }
 

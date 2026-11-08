@@ -18,8 +18,10 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
+import Link from "next/link";
 import {
   deleteRow,
+  deleteRows,
   ENTITIES,
   insertComment,
   insertRow,
@@ -38,6 +40,7 @@ import { boardRows, type BoardRow } from "./selectors";
 import { supabase, supabaseConfigured } from "./supabase";
 import type { AccessLevel, Dataset, Deliverable, DeliverableStatus, IsoDate, TeamMember } from "./types";
 import { applyMove, type MoveResult } from "./workflow";
+import { AvatarTints, avatarTints } from "@/components/ui";
 
 export type { EntityKey, EntityRow, Result } from "./backend";
 
@@ -64,6 +67,16 @@ export interface Toast {
   id: number;
   text: string;
   tone: "info" | "error" | "success";
+  /** A link or button after the text, e.g. "Open". */
+  action?: ToastAction;
+}
+
+export type ToastAction = { label: string; href: string } | { label: string; run: () => void };
+
+/** When the data was last loaded from Supabase, and whether a reload is running. */
+export interface SyncState {
+  at: number;
+  busy: boolean;
 }
 
 interface NumuValue {
@@ -86,9 +99,12 @@ interface NumuValue {
   /** Insert or update a client, contact, retainer, scope line, project or team member. */
   save: <K extends EntityKey>(entity: K, row: EntityRow<K>) => Promise<Result>;
   remove: (entity: EntityKey, id: string) => Promise<Result>;
+  /** Delete several tasks/deliverables at once (leads and partners). */
+  removeMany: (ids: string[]) => Promise<Result>;
+  sync: SyncState;
   generate: (month: IsoDate, retainerId?: string | null) => Promise<{ ok: true; created: number } | { ok: false; reason: string }>;
   refresh: () => Promise<void>;
-  notify: (text: string, tone?: Toast["tone"]) => void;
+  notify: (text: string, tone?: Toast["tone"], action?: ToastAction) => void;
   signOut: () => Promise<void>;
   viewAs: (teamMemberId: string) => void;
   /** Demo only: drop the fictional clients and work to try entering your own. */
@@ -190,22 +206,34 @@ class Sync {
     private live: boolean,
     private setData: (d: Dataset) => void,
     private setToasts: Dispatch<SetStateAction<Toast[]>>,
+    private setSync: Dispatch<SetStateAction<SyncState>>,
   ) {}
 
-  notify = (text: string, tone: Toast["tone"] = "info") => {
+  notify = (text: string, tone: Toast["tone"] = "info", action?: ToastAction) => {
     const id = ++this.toastSeq;
-    this.setToasts((t) => [...t.slice(-2), { id, text, tone }]);
-    setTimeout(() => this.setToasts((t) => t.filter((x) => x.id !== id)), tone === "error" ? 6000 : 3500);
+    this.setToasts((t) => [...t.slice(-2), { id, text, tone, action }]);
+    setTimeout(() => this.setToasts((t) => t.filter((x) => x.id !== id)), tone === "error" ? 6000 : action ? 5000 : 3500);
   };
 
   refresh = async () => {
-    if (!this.live) return;
+    if (!this.live) {
+      // Demo data lives in this tab: nothing to fetch, but the indicator still answers.
+      this.setSync({ at: Date.now(), busy: false });
+      return;
+    }
+    this.setSync((s) => ({ ...s, busy: true }));
     try {
       const next = await loadDataset(supabase());
       this.lastLoad = Date.now();
-      if (this.pending === 0) this.setData(next);
-      else this.schedule();
+      if (this.pending === 0) {
+        this.setData(next);
+        this.setSync({ at: this.lastLoad, busy: false });
+      } else {
+        this.setSync((s) => ({ ...s, busy: false }));
+        this.schedule();
+      }
     } catch {
+      this.setSync((s) => ({ ...s, busy: false }));
       this.notify("Couldn't refresh. Check your connection", "error");
     }
   };
@@ -243,6 +271,7 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
   const [data, setData] = useState<Dataset>(() => live?.data ?? buildDemoDataset(today, now));
   const [demoMeId, setDemoMeId] = useState(readViewAs);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [syncState, setSyncState] = useState<SyncState>(() => ({ at: now.getTime(), busy: false }));
 
   const meId = live?.meId ?? demoMeId;
   // If a refresh no longer includes me (deactivated), keep my row from sign-in
@@ -253,7 +282,7 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
   const role = me.access_level;
   const rows = useMemo(() => boardRows(data, today, new Date()), [data, today]);
 
-  const [sync] = useState(() => new Sync(isLive, setData, setToasts));
+  const [sync] = useState(() => new Sync(isLive, setData, setToasts, setSyncState));
   const { notify, refresh, write } = sync;
 
   // Pick up teammates' changes when coming back to the tab.
@@ -264,9 +293,14 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
+    // And every two minutes while the tab is open, so teammates' moves show up.
+    const every = setInterval(() => {
+      if (document.visibilityState === "visible") sync.schedule(0);
+    }, 120_000);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
+      clearInterval(every);
     };
   }, [isLive, sync]);
 
@@ -426,6 +460,20 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
     [data, isLive, write, refresh],
   );
 
+  const removeMany = useCallback(
+    async (ids: string[]): Promise<Result> => {
+      if (ids.length === 0) return { ok: true };
+      if (isLive) {
+        const r = await write(() => deleteRows(supabase(), "deliverables", ids), true);
+        await refresh();
+        return r;
+      }
+      setData((prev) => ids.reduce((d, id) => demoDelete(d, "deliverables", id), prev));
+      return { ok: true };
+    },
+    [isLive, write, refresh],
+  );
+
   const generate = useCallback(
     async (month: IsoDate, retainerId?: string | null) => {
       if (role === "creator") return { ok: false as const, reason: "Partners and account leads generate deliverables" };
@@ -466,6 +514,8 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
     if (!isLive) setData((prev) => EMPTY_DEMO(prev));
   }, [isLive]);
 
+  const tints = useMemo(() => avatarTints(data.team.map((m) => m.full_name)), [data.team]);
+
   const value: NumuValue = {
     data,
     rows,
@@ -483,6 +533,8 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
     comment,
     save,
     remove,
+    removeMany,
+    sync: syncState,
     generate,
     refresh,
     notify,
@@ -493,8 +545,10 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
 
   return (
     <NumuContext value={value}>
-      {children}
-      <Toaster toasts={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
+      <AvatarTints value={tints}>
+        {children}
+        <Toaster toasts={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
+      </AvatarTints>
     </NumuContext>
   );
 }
@@ -506,20 +560,44 @@ function Toaster({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: numbe
       className="pointer-events-none fixed inset-x-0 bottom-[calc(76px+env(safe-area-inset-bottom))] z-[80] flex flex-col items-center gap-2 px-4 md:bottom-6"
     >
       {toasts.map((t) => (
-        <button
+        <div
           key={t.id}
-          type="button"
-          onClick={() => onDismiss(t.id)}
-          className="toast-in pointer-events-auto flex max-w-[460px] items-center gap-2.5 rounded-xl border border-line bg-surface px-4 py-2.5 text-left text-[13px] text-ink shadow-lg"
+          className="toast-in pointer-events-auto flex max-w-[480px] items-center gap-1 rounded-xl border border-line bg-surface py-1 pr-1 pl-4 text-[13px] text-ink shadow-lg"
           role={t.tone === "error" ? "alert" : "status"}
         >
-          <span
-            aria-hidden
-            className="size-2 shrink-0 rounded-full"
-            style={{ background: t.tone === "error" ? "var(--critical)" : t.tone === "success" ? "var(--good)" : "var(--focus)" }}
-          />
-          {t.text}
-        </button>
+          <button type="button" onClick={() => onDismiss(t.id)} className="flex min-h-9 items-center gap-2.5 py-1.5 pr-2 text-left">
+            <span
+              aria-hidden
+              className="size-2 shrink-0 rounded-full"
+              style={{ background: t.tone === "error" ? "var(--critical)" : t.tone === "success" ? "var(--good)" : "var(--focus)" }}
+            />
+            {t.text}
+          </button>
+          {t.action ? (
+            "href" in t.action ? (
+              <Link
+                href={t.action.href}
+                onClick={() => onDismiss(t.id)}
+                className="shrink-0 rounded-lg px-2.5 py-1.5 font-medium text-ink underline-offset-2 hover:bg-surface-3"
+              >
+                {t.action.label}
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  if ("run" in t.action!) t.action.run();
+                  onDismiss(t.id);
+                }}
+                className="shrink-0 rounded-lg px-2.5 py-1.5 font-medium text-ink hover:bg-surface-3"
+              >
+                {t.action.label}
+              </button>
+            )
+          ) : (
+            <span className="w-2" />
+          )}
+        </div>
       ))}
     </div>
   );

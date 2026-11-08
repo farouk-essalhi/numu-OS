@@ -2,8 +2,11 @@
 
 import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, ChevronDown, CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
+import { createContext, useContext, type ComponentProps, type ReactNode } from "react";
+import { AVATAR_TINTS, avatarTints, hashOf } from "@/lib/avatars";
 import { cn, initials } from "@/lib/format";
+
+export { avatarTints };
 import type { DeliverableStatus } from "@/lib/types";
 import { STATUS_META } from "@/lib/workflow";
 
@@ -17,7 +20,8 @@ type Size = "sm" | "md";
 const buttonClasses = (variant: Variant, size: Size, className?: string) =>
   cn(
     "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg font-medium whitespace-nowrap transition-colors disabled:pointer-events-none disabled:opacity-40 [&>svg]:size-4",
-    size === "sm" ? "h-8 px-2.5 text-[13px]" : "h-9 px-3.5 text-[13px]",
+    // A little taller on phones, so they're easy to tap.
+    size === "sm" ? "h-9 px-2.5 text-[13px] md:h-8" : "h-10 px-3.5 text-[13px] md:h-9",
     variant === "primary" && "bg-primary text-primary-ink shadow-sm hover:opacity-90",
     variant === "secondary" && "border border-line bg-surface text-ink shadow-sm hover:bg-surface-2",
     variant === "ghost" && "text-ink-2 hover:bg-surface-3 hover:text-ink",
@@ -54,7 +58,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={cn(
-        "relative grid size-9 shrink-0 place-items-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink [&>svg]:size-[18px]",
+        "relative grid size-10 shrink-0 place-items-center rounded-lg text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink md:size-9 [&>svg]:size-[18px]",
         className,
       )}
       {...props}
@@ -245,11 +249,11 @@ export function Delta({
 // People
 // ---------------------------------------------------------------------------
 
-const AVATAR_TINTS = ["#e7dccf", "#d5e3d0", "#dcd8ef", "#f0d9c8", "#d1e0ea", "#ece2bd", "#e6d2dc"];
+export const AvatarTints = createContext<Map<string, string>>(new Map());
 
 export function Avatar({ name, size = 24, className, square }: { name: string; size?: number; className?: string; square?: boolean }) {
-  let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const tints = useContext(AvatarTints);
+  const tint = tints.get(name) ?? AVATAR_TINTS[hashOf(name) % AVATAR_TINTS.length];
   return (
     <span
       title={name}
@@ -258,7 +262,7 @@ export function Avatar({ name, size = 24, className, square }: { name: string; s
         square ? "rounded-lg" : "rounded-full",
         className,
       )}
-      style={{ width: size, height: size, fontSize: Math.max(9, Math.round(size * 0.38)), background: AVATAR_TINTS[h % AVATAR_TINTS.length] }}
+      style={{ width: size, height: size, fontSize: Math.max(9, Math.round(size * 0.38)), background: tint }}
     >
       {initials(name)}
     </span>
@@ -353,7 +357,7 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div role="radiogroup" className={cn("inline-flex h-9 items-center gap-0.5 rounded-lg border border-line bg-surface-3 p-0.5", className)}>
+    <div role="radiogroup" className={cn("inline-flex h-10 items-center gap-0.5 rounded-lg border border-line bg-surface-3 p-0.5 md:h-9", className)}>
       {options.map((o) => (
         <button
           key={o.value}
@@ -392,7 +396,7 @@ export function SelectFilter({
   return (
     <label
       className={cn(
-        "relative inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface pr-2 pl-3 text-[13px] shadow-sm hover:bg-surface-2",
+        "relative inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-line bg-surface pr-2 pl-3 text-[13px] shadow-sm hover:bg-surface-2 md:h-9",
         value ? "text-ink" : "text-muted",
         className,
       )}

@@ -29,6 +29,7 @@ import { applyTheme, readTheme } from "@/lib/theme";
 import { NewDeliverableSheet } from "../new-deliverable-sheet";
 import { Avatar, Button, CountBadge, IconButton, Kbd } from "../ui";
 import { CommandPalette } from "./command-palette";
+import { PullToRefresh, SyncButton } from "./sync";
 import { isActive, MOBILE_TABS, NAV, SETTINGS_ITEM, titleFor, type BadgeKey, type NavItem } from "./nav";
 
 const ROLE_LABEL = { partner: "Partner", account_lead: "Account lead", creator: "Creator" } as const;
@@ -66,6 +67,13 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // The count in the browser tab, so a pinned tab shows when something needs you.
+  const pageTitle = titleFor(pathname);
+  const count = badges.mine + badges.approvals;
+  useEffect(() => {
+    document.title = `${count ? `(${count}) ` : ""}${pageTitle} · NUMU OS`;
+  }, [count, pageTitle, pathname]);
+
   // Close the phone drawer after navigating.
   const [lastPath, setLastPath] = useState(pathname);
   if (lastPath !== pathname) {
@@ -85,7 +93,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const sidebarProps = { badges, canCreate, onNew: () => setNewOpen(true), onSearch: () => setPalette(true) };
 
   return (
-    <div className="min-h-dvh">
+    <div className="app-in min-h-dvh">
+      <PullToRefresh />
       {/* Desktop / tablet sidebar */}
       <aside
         className={cn(
@@ -354,6 +363,7 @@ function TopBar({
         <IconButton label="Search" onClick={onSearch} className="lg:hidden">
           <Search />
         </IconButton>
+        <SyncButton />
         <ThemeToggle />
         <Notifications />
         {onNew ? (

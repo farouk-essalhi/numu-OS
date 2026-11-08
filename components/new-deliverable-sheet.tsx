@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { Drawer } from "vaul";
@@ -73,7 +72,6 @@ const control =
 
 function Form({ onDone }: { onDone: () => void }) {
   const { data, me, role, today, create, save, notify } = useNumu();
-  const router = useRouter();
 
   const clients = useMemo(() => {
     const led = ledClientIds(data, me.id, role);
@@ -84,14 +82,26 @@ function Form({ onDone }: { onDone: () => void }) {
   const taskTypes = data.deliverableTypes.filter((t) => !t.is_content);
   const contentTypes = data.deliverableTypes.filter((t) => t.is_content);
 
-  const [kind, setKind] = useState<Kind>("task");
-  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
+  // Start from what this person picked last time.
+  const [last] = useState(readLast);
+  const [kind, setKind] = useState<Kind>(last.kind === "content" && canPlan(role) ? "content" : "task");
+  const [clientId, setClientId] = useState(
+    clients.some((c) => c.id === last.clientId) ? last.clientId! : (clients[0]?.id ?? ""),
+  );
   const [projectId, setProjectId] = useState("");
-  const [type, setType] = useState<DeliverableTypeCode>(taskTypes[0]?.code ?? "follow_up");
+  const [type, setType] = useState<DeliverableTypeCode>(() => {
+    const k = last.kind === "content" && canPlan(role) ? "content" : "task";
+    const remembered = k === "task" ? last.taskType : last.contentType;
+    const list = k === "task" ? taskTypes : contentTypes;
+    return list.some((t) => t.code === remembered) ? remembered! : (list[0]?.code ?? "follow_up");
+  });
   const [platform, setPlatform] = useState<Platform | "">("instagram");
   const [title, setTitle] = useState("");
   const [due, setDue] = useState(workingDaysFrom(today, kind === "task" ? 1 : 3));
-  const [ownerId, setOwnerId] = useState(data.clients.find((c) => c.id === clients[0]?.id)?.account_lead_id ?? me.id);
+  // A task you add is yours unless you give it away; content goes to the client's lead.
+  const [ownerId, setOwnerId] = useState(
+    kind === "task" ? me.id : (data.clients.find((c) => c.id === clientId)?.account_lead_id ?? me.id),
+  );
   const [repeat, setRepeat] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -146,9 +156,13 @@ function Form({ onDone }: { onDone: () => void }) {
       due_date: due,
     });
     if (!result.ok) return setError(result.reason);
+    writeLast({ kind, clientId, taskType: isTask ? type : last.taskType, contentType: isTask ? last.contentType : type });
     onDone();
-    if (isTask) notify(repeat ? `Added, and it repeats every month on day ${dayNumber(due)}` : "Task added", "success");
-    else router.push(`/deliverables/${result.id}`);
+    notify(
+      isTask ? (repeat ? `Added. It repeats every month on day ${dayNumber(due)}` : "Task added") : "Deliverable added",
+      "success",
+      { label: "Open", href: `/deliverables/${result.id}` },
+    );
   }
 
   return (
@@ -204,7 +218,7 @@ function Form({ onDone }: { onDone: () => void }) {
                 setProjectId("");
                 setRepeat(false);
                 const c = data.clients.find((x) => x.id === e.target.value);
-                if (c?.account_lead_id) setOwnerId(c.account_lead_id);
+                if (!isTask && c?.account_lead_id) setOwnerId(c.account_lead_id);
               }}
               className={control}
             >
@@ -242,9 +256,7 @@ function Form({ onDone }: { onDone: () => void }) {
             </select>
           </Field>
           {isTask ? (
-            <Field label="Owner">
-              <Owner value={ownerId} onChange={setOwnerId} />
-            </Field>
+            <OwnerField value={ownerId} onChange={setOwnerId} />
           ) : (
             <Field label="Platform">
               <select value={platform} onChange={(e) => setPlatform(e.target.value as Platform | "")} className={control}>
@@ -259,11 +271,7 @@ function Form({ onDone }: { onDone: () => void }) {
           <Field label={isTask ? "Due" : "Due for review"}>
             <input type="date" value={due} min={today} onChange={(e) => e.target.value && setDue(e.target.value)} className={control} />
           </Field>
-          {!isTask ? (
-            <Field label="Owner">
-              <Owner value={ownerId} onChange={setOwnerId} />
-            </Field>
-          ) : null}
+          {!isTask ? <OwnerField value={ownerId} onChange={setOwnerId} /> : null}
         </div>
         {isTask ? (
           <Check
@@ -295,10 +303,57 @@ function Form({ onDone }: { onDone: () => void }) {
   );
 }
 
-function Owner({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+const LAST_KEY = "numu.newTask";
+
+interface Last {
+  kind?: Kind;
+  clientId?: string;
+  taskType?: DeliverableTypeCode;
+  contentType?: DeliverableTypeCode;
+}
+
+function readLast(): Last {
+  try {
+    return JSON.parse(localStorage.getItem(LAST_KEY) ?? "{}") as Last;
+  } catch {
+    return {};
+  }
+}
+
+function writeLast(v: Last) {
+  try {
+    localStorage.setItem(LAST_KEY, JSON.stringify(v));
+  } catch {
+    // private mode: just don't remember
+  }
+}
+
+/** Owner, with a one-tap "Assign to me". */
+function OwnerField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const { me } = useNumu();
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <label htmlFor="new-task-owner" className="text-[12.5px] font-medium text-ink-2">
+          Owner
+        </label>
+        {value !== me.id ? (
+          <button type="button" onClick={() => onChange(me.id)} className="rounded px-1 text-[12px] font-medium text-focus hover:underline">
+            Assign to me
+          </button>
+        ) : (
+          <span className="text-[12px] text-muted">You</span>
+        )}
+      </div>
+      <Owner id="new-task-owner" value={value} onChange={onChange} />
+    </div>
+  );
+}
+
+function Owner({ id, value, onChange }: { id?: string; value: string; onChange: (v: string) => void }) {
   const { data } = useNumu();
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)} className={control}>
+    <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={control}>
       <option value="">Unassigned</option>
       {data.team
         .filter((m) => m.is_active)

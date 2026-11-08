@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { formatMonth } from "@/lib/dates";
 import { PLATFORM_LABEL } from "@/lib/format";
-import { useNumu, type EntityKey, type EntityRow, type Result } from "@/lib/store";
+import { useNumu, type EntityKey, type EntityRow, type Result, type ToastAction } from "@/lib/store";
 import type {
   AccessLevel,
   Client,
@@ -51,13 +51,13 @@ function useSubmit(onDone: () => void) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function run(fn: () => Promise<Result>, ok: string, after?: () => void) {
+  async function run(fn: () => Promise<Result>, ok: string, after?: () => void, action?: ToastAction) {
     setSaving(true);
     setError(null);
     const r = await fn();
     setSaving(false);
     if (!r.ok) return setError(r.reason);
-    notify(ok, "success");
+    notify(ok, "success", action);
     onDone();
     after?.();
   }
@@ -66,7 +66,8 @@ function useSubmit(onDone: () => void) {
     saving,
     error,
     setError,
-    submit: <K extends EntityKey>(entity: K, row: EntityRow<K>, ok: string, after?: () => void) => run(() => save(entity, row), ok, after),
+    submit: <K extends EntityKey>(entity: K, row: EntityRow<K>, ok: string, after?: () => void, action?: ToastAction) =>
+      run(() => save(entity, row), ok, after, action),
     destroy: (entity: EntityKey, id: string, ok: string, after?: () => void) => run(() => remove(entity, id), ok, after),
   };
 }
@@ -483,10 +484,11 @@ function ProjectForm({ clientId, row, onDone }: { clientId?: string; row?: Proje
     const fee = parseMoney(f.fee || "0");
     if (fee === null) return setError("Enter the fee as a number, e.g. 30000");
     if (f.start_date && f.deadline && f.deadline < f.start_date) return setError("The deadline must be after the start");
+    const id = row?.id ?? newId();
     void submit(
       "projects",
       {
-        id: row?.id ?? newId(),
+        id,
         client_id: f.client_id,
         name_en: f.name_en.trim(),
         name_ar: orNull(f.name_ar),
@@ -498,6 +500,8 @@ function ProjectForm({ clientId, row, onDone }: { clientId?: string; row?: Proje
         notes: orNull(f.notes),
       },
       row ? "Campaign saved" : "Campaign added. Add its deliverables and tasks with New task",
+      undefined,
+      { label: "Open", href: `/deliverables?project=${id}` },
     );
   }
 

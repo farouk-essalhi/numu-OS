@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowRight, ArrowUp, Check, ChevronRight, ExternalLink, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowRight, ArrowUp, Check, ChevronDown, ChevronRight, ExternalLink, Link2, Pencil, RotateCcw, Trash2, UserRound } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { FlagPills, StatusStepper } from "@/components/deliverables";
 import { Avatar, Button, Card, CardHeader, Empty, Pill, StatusPill } from "@/components/ui";
@@ -71,8 +71,9 @@ export default function DeliverablePage() {
 
       <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <h1 className="text-[22px] leading-tight font-semibold tracking-[-0.02em] sm:text-[24px]">{row.title}</h1>
+          <EditableTitle value={row.title} onSave={(title) => patch({ title })} />
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <OwnerChip ownerId={row.owner_id} onChange={(owner_id) => patch({ owner_id })} />
             <StatusPill status={row.status} />
             <Pill>{row.type.name_en}</Pill>
             {row.platform ? <Pill>{PLATFORM_LABEL[row.platform]}</Pill> : null}
@@ -135,6 +136,7 @@ export default function DeliverablePage() {
               <RotateCcw /> Reopen
             </Button>
           ) : null}
+          <CopyLink id={row.id} />
           {role !== "creator" ? <DeleteButton id={row.id} /> : null}
         </div>
       </div>
@@ -379,6 +381,101 @@ function DeleteButton({ id }: { id: string }) {
       onBlur={() => setSure(false)}
     >
       <Trash2 /> {sure ? "Sure? Delete" : ""}
+    </Button>
+  );
+}
+
+/** The title, renamed in place: click it, type, Enter (or click away) saves, Esc cancels. */
+function EditableTitle({ value, onSave }: { value: string; onSave: (v: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const cls = "text-[22px] leading-tight font-semibold tracking-[-0.02em] sm:text-[24px]";
+  if (draft === null) {
+    return (
+      <h1 className={cls}>
+        <button
+          type="button"
+          onClick={() => setDraft(value)}
+          title="Rename"
+          className="group -mx-1.5 rounded-lg px-1.5 text-left hover:bg-surface-3"
+        >
+          {value}
+          <Pencil className="ml-2 inline size-4 align-[-1px] text-faint opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+        </button>
+      </h1>
+    );
+  }
+  const commit = () => {
+    const next = draft.trim();
+    if (next && next !== value) onSave(next);
+    setDraft(null);
+  };
+  return (
+    <input
+      autoFocus
+      aria-label="Title"
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        if (e.key === "Escape") setDraft(null);
+      }}
+      className={cn(cls, "-mx-1.5 w-full rounded-lg border border-focus bg-surface px-1.5 outline-none ring-2 ring-focus/20")}
+    />
+  );
+}
+
+/** Who has it, changeable in place. */
+function OwnerChip({ ownerId, onChange }: { ownerId: string | null; onChange: (id: string | null) => void }) {
+  const { data, me } = useNumu();
+  const owner = ownerId ? data.team.find((m) => m.id === ownerId) : null;
+  return (
+    <label className="relative inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full border border-line bg-surface pr-2 pl-0.5 text-[12.5px] font-medium shadow-sm hover:border-line-strong">
+      {owner ? (
+        <Avatar name={owner.full_name} size={22} />
+      ) : (
+        <span className="grid size-[22px] place-items-center rounded-full border border-dashed border-line-strong text-faint">
+          <UserRound className="size-3" />
+        </span>
+      )}
+      {owner ? (owner.id === me.id ? "You" : firstName(owner.full_name)) : "Unassigned"}
+      <ChevronDown className="size-3 text-faint" />
+      <select
+        aria-label="Owner"
+        value={ownerId ?? ""}
+        onChange={(e) => onChange(e.target.value || null)}
+        className="absolute inset-0 cursor-pointer opacity-0"
+      >
+        <option value="">Unassigned</option>
+        {data.team
+          .filter((m) => m.is_active || m.id === ownerId)
+          .map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.id === me.id ? `${m.full_name} (you)` : m.full_name}
+            </option>
+          ))}
+      </select>
+    </label>
+  );
+}
+
+/** Copy the task's link, to paste into WhatsApp. */
+function CopyLink({ id }: { id: string }) {
+  const { notify } = useNumu();
+  return (
+    <Button
+      onClick={async () => {
+        const url = `${location.origin}/deliverables/${id}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          notify("Link copied. Paste it in WhatsApp", "success");
+        } catch {
+          notify("Couldn't copy. The link is in the address bar", "error");
+        }
+      }}
+      title="Copy a link to this task"
+    >
+      <Link2 /> Copy link
     </Button>
   );
 }

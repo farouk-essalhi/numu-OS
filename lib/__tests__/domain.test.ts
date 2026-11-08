@@ -200,3 +200,15 @@ describe("demo data", () => {
     expect(p.capacity.length).toBeGreaterThan(0);
   });
 });
+
+describe("avatar colours", () => {
+  it("gives every teammate their own colour, the same on every screen", async () => {
+    const { avatarTints } = await import("../avatars");
+    const team = ["Farouk", "Ali", "Rand", "Khaled", "Anas", "Ruba", "Busafen"];
+    const tints = avatarTints(team);
+    expect(new Set(team.map((n) => tints.get(n))).size).toBe(team.length);
+    // Adding someone doesn't repaint people who had no clash.
+    const more = avatarTints([...team, "Nour"]);
+    expect(team.filter((n) => more.get(n) !== tints.get(n)).length).toBeLessThanOrEqual(1);
+  });
+});

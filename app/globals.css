@@ -391,3 +391,24 @@ body {
 .card-hole > * {
   visibility: hidden;
 }
+
+/* The app fades in over the loading skeleton instead of snapping. */
+@keyframes app-in {
+  from {
+    opacity: 0;
+  }
+}
+.app-in {
+  animation: app-in 260ms ease-out both;
+}
+
+/* Our own pull-to-refresh replaces the browser's (which reloads the page). */
+html,
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* Select mode: the tick circle takes the owner's place on a card. */
+.selecting .card-owner {
+  visibility: hidden;
+}

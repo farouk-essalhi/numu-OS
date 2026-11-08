@@ -120,7 +120,10 @@ export function payloadFor<K extends EntityKey>(entity: K, row: EntityRow<K>): R
 type AnyTable = {
   insert: (v: unknown) => PromiseLike<{ error: PostgrestError | null }>;
   update: (v: unknown) => { eq: (c: string, v: string) => { select: (c: string) => PromiseLike<{ data: unknown[] | null; error: PostgrestError | null }> } };
-  delete: () => { eq: (c: string, v: string) => { select: (c: string) => PromiseLike<{ data: unknown[] | null; error: PostgrestError | null }> } };
+  delete: () => {
+    eq: (c: string, v: string) => { select: (c: string) => PromiseLike<{ data: unknown[] | null; error: PostgrestError | null }> };
+    in: (c: string, v: string[]) => { select: (c: string) => PromiseLike<{ data: unknown[] | null; error: PostgrestError | null }> };
+  };
 };
 const table = (sb: Supabase, name: string) => sb.from(name as "clients") as unknown as AnyTable;
 
@@ -141,6 +144,20 @@ export async function deleteRow(sb: Supabase, entity: EntityKey, id: string): Pr
   const { data, error } = await table(sb, ENTITIES[entity].table).delete().eq("id", id).select("id");
   if (error) return { ok: false, reason: friendlyError(error) };
   if (!data?.length) return { ok: false, reason: "You don't have permission to delete this" };
+  return { ok: true };
+}
+
+/** Delete many rows, 100 at a time. Rows RLS hides are not deleted, which we report. */
+export async function deleteRows(sb: Supabase, entity: EntityKey, ids: string[]): Promise<Result> {
+  let deleted = 0;
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await table(sb, ENTITIES[entity].table).delete().in("id", ids.slice(i, i + 100)).select("id");
+    if (error) return { ok: false, reason: friendlyError(error) };
+    deleted += data?.length ?? 0;
+  }
+  if (deleted < ids.length) {
+    return { ok: false, reason: deleted ? `Deleted ${deleted} of ${ids.length}; you don't have permission for the rest` : "You don't have permission to delete these" };
+  }
   return { ok: true };
 }
 
