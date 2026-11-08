@@ -70,6 +70,10 @@ export interface TeamMember {
   employment: EmploymentType;
   weekly_capacity_points: number;
   is_active: boolean;
+  /** What they sign in with; null until they choose one. */
+  username: string | null;
+  /** When they chose their own username and password; null = asked at next sign-in. */
+  credentials_set_at: IsoTimestamp | null;
   /** Permissions partners set per person (Team → Permissions). */
   can_create_tasks: boolean;
   can_send_to_client: boolean;

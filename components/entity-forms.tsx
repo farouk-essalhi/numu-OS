@@ -610,6 +610,9 @@ function MemberForm({ row, onDone }: { row?: TeamMember; onDone: () => void }) {
         can_create_tasks: row?.can_create_tasks ?? true,
         can_send_to_client: row?.can_send_to_client ?? f.access_level !== "creator",
         can_approve: row?.can_approve ?? f.access_level === "partner",
+        // Theirs to choose (Settings, or the first sign-in screen); not written from here.
+        username: row?.username ?? null,
+        credentials_set_at: row?.credentials_set_at ?? null,
       },
       row ? "Saved" : `${f.full_name.trim()} added`,
     );
@@ -665,6 +668,46 @@ function MemberForm({ row, onDone }: { row?: TeamMember; onDone: () => void }) {
         label="Active"
         hint="Inactive people can't sign in and don't get new work, but their history stays"
       />
+      {row?.user_id && !isMe ? <LoginSetup member={row} onDone={onDone} /> : null}
     </SheetForm>
+  );
+}
+
+/**
+ * How someone signs in, and a way to make them choose a new username and
+ * password next time (e.g. after resetting their password in Supabase).
+ */
+function LoginSetup({ member, onDone }: { member: TeamMember; onDone: () => void }) {
+  const { askToSetUpAgain, notify } = useNumu();
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="rounded-lg border border-line px-3 py-2.5 text-[13px]">
+      <p className="font-medium">Sign-in</p>
+      <p className="mt-0.5 text-[12px] text-muted">
+        {member.credentials_set_at
+          ? `Signs in as @${member.username ?? "…"} with a password they chose.`
+          : "Will choose their own username and password the next time they sign in."}
+      </p>
+      {member.credentials_set_at ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            const r = await askToSetUpAgain(member.id);
+            setBusy(false);
+            if (!r.ok) return notify(r.reason, "error");
+            notify(`${member.full_name} will choose a new username and password next time`, "success");
+            onDone();
+          }}
+          className="mt-2 text-[12.5px] font-medium text-focus hover:underline disabled:opacity-50"
+        >
+          Ask them to choose a new one next sign-in
+        </button>
+      ) : null}
+      <p className="mt-1.5 text-[11.5px] text-faint">
+        Forgot their password? Set a temporary one in Supabase (Authentication → Users), then ask them to choose a new one here.
+      </p>
+    </div>
   );
 }

@@ -57,6 +57,8 @@ export type Database = {
           can_create_tasks: boolean;
           can_send_to_client: boolean;
           can_approve: boolean;
+          username: string | null;
+          credentials_set_at: string | null;
         } & Stamps,
         | "id"
         | "user_id"
@@ -70,6 +72,8 @@ export type Database = {
         | "can_create_tasks"
         | "can_send_to_client"
         | "can_approve"
+        | "username"
+        | "credentials_set_at"
         | keyof Stamps
       >;
       clients: Table<
@@ -214,6 +218,8 @@ export type Database = {
         Args: { p_month?: string; p_retainer_id?: string };
         Returns: number;
       };
+      login_email: { Args: { p_username: string }; Returns: string | null };
+      set_my_login: { Args: { p_username: string }; Returns: undefined };
     };
     Enums: Enums;
     CompositeTypes: { [_ in never]: never };

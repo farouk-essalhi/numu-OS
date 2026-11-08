@@ -28,6 +28,7 @@ import {
   loadDataset,
   payloadFor,
   runGenerator,
+  setMyLogin,
   updateRow,
   type EntityKey,
   type EntityRow,
@@ -40,6 +41,7 @@ import { boardRows, type BoardRow } from "./selectors";
 import { supabase, supabaseConfigured } from "./supabase";
 import type { AccessLevel, Dataset, Deliverable, DeliverableStatus, IsoDate, TeamMember } from "./types";
 import { applyMove, type MoveResult } from "./workflow";
+import { authPasswordError, normalizeUsername } from "./logins";
 import { AvatarTints, avatarTints } from "@/components/ui";
 
 export type { EntityKey, EntityRow, Result } from "./backend";
@@ -101,6 +103,11 @@ interface NumuValue {
   remove: (entity: EntityKey, id: string) => Promise<Result>;
   /** Delete several tasks/deliverables at once (leads and partners). */
   removeMany: (ids: string[]) => Promise<Result>;
+  /** My own sign-in: username and password. */
+  setMyUsername: (username: string) => Promise<Result>;
+  setMyPassword: (password: string) => Promise<Result>;
+  /** Partners: make someone choose a new username and password at next sign-in. */
+  askToSetUpAgain: (memberId: string) => Promise<Result>;
   sync: SyncState;
   generate: (month: IsoDate, retainerId?: string | null) => Promise<{ ok: true; created: number } | { ok: false; reason: string }>;
   refresh: () => Promise<void>;
@@ -118,7 +125,7 @@ const NumuContext = createContext<NumuValue | null>(null);
 // React's use() gets the same promise on every render.
 // ---------------------------------------------------------------------------
 export type LiveBoot =
-  | { kind: "ready"; data: Dataset; meId: string }
+  | { kind: "ready"; data: Dataset; meId: string; email: string }
   | { kind: "signed_out" }
   | { kind: "no_member"; email: string }
   | { kind: "error"; message: string };
@@ -135,7 +142,7 @@ export function liveBoot(): Promise<LiveBoot> {
       const data = await loadDataset(sb);
       const me = data.team.find((m) => m.user_id === user.id && m.is_active);
       if (!me) return { kind: "no_member", email: user.email ?? "" };
-      return { kind: "ready", data, meId: me.id };
+      return { kind: "ready", data, meId: me.id, email: user.email ?? me.email ?? "" };
     } catch (e) {
       return { kind: "error", message: e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e) };
     }
@@ -474,6 +481,48 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
     [isLive, write, refresh],
   );
 
+  const setMyUsername = useCallback(
+    async (username: string): Promise<Result> => {
+      if (isLive) {
+        const r = await setMyLogin(supabase(), username);
+        if (r.ok) await refresh();
+        return r;
+      }
+      const taken = data.team.some((m) => m.id !== me.id && m.username === normalizeUsername(username));
+      if (taken) return { ok: false, reason: "That username is taken" };
+      setData((prev) => ({
+        ...prev,
+        team: prev.team.map((m) =>
+          m.id === me.id ? { ...m, username: normalizeUsername(username), credentials_set_at: m.credentials_set_at ?? new Date().toISOString() } : m,
+        ),
+      }));
+      return { ok: true };
+    },
+    [isLive, refresh, data.team, me.id],
+  );
+
+  const setMyPassword = useCallback(
+    async (password: string): Promise<Result> => {
+      if (!isLive) return { ok: true }; // demo: nothing to change
+      const { error } = await supabase().auth.updateUser({ password });
+      return error ? { ok: false, reason: authPasswordError(error.message) } : { ok: true };
+    },
+    [isLive],
+  );
+
+  const askToSetUpAgain = useCallback(
+    async (memberId: string): Promise<Result> => {
+      if (isLive) {
+        const r = await write(() => updateRow(supabase(), "team", memberId, { credentials_set_at: null }), true);
+        if (r.ok) await refresh();
+        return r;
+      }
+      setData((prev) => ({ ...prev, team: prev.team.map((m) => (m.id === memberId ? { ...m, credentials_set_at: null } : m)) }));
+      return { ok: true };
+    },
+    [isLive, write, refresh],
+  );
+
   const generate = useCallback(
     async (month: IsoDate, retainerId?: string | null) => {
       if (role === "creator") return { ok: false as const, reason: "Partners and account leads generate deliverables" };
@@ -534,6 +583,9 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
     save,
     remove,
     removeMany,
+    setMyUsername,
+    setMyPassword,
+    askToSetUpAgain,
     sync: syncState,
     generate,
     refresh,

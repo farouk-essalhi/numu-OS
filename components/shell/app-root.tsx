@@ -1,13 +1,34 @@
 "use client";
 
 import { LogOut, RefreshCw, ShieldAlert } from "lucide-react";
-import { use, useEffect, type ReactNode } from "react";
+import { use, useEffect, useState, type ReactNode } from "react";
 import { browser } from "react-dom";
 import { Button } from "@/components/ui";
 import { AppShell, Logo } from "./app-shell";
 import { ShellSkeleton } from "./skeleton";
+import { loginEmail, setMyLogin } from "@/lib/backend";
+import { authPasswordError } from "@/lib/logins";
 import { liveBoot, NumuProvider, supabaseConfigured } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
+import { FirstLogin, type LoginActions } from "./first-login";
+
+/** First sign-in, straight against Supabase (the app isn't loaded yet). */
+const liveLoginActions = (myEmail: string): LoginActions => ({
+  isTaken: async (username) => {
+    const { email } = await loginEmail(supabase(), username);
+    return Boolean(email && email.toLowerCase() !== myEmail.toLowerCase());
+  },
+  setPassword: async (password) => {
+    const { error } = await supabase().auth.updateUser({ password });
+    return error ? { ok: false, reason: authPasswordError(error.message) } : { ok: true };
+  },
+  setUsername: (username) => setMyLogin(supabase(), username),
+  signOut: async () => {
+    await supabase().auth.signOut();
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    location.assign("/login");
+  },
+});
 
 /**
  * The signed-in app. Everything depends on who is looking and on today's date
@@ -30,6 +51,7 @@ export function AppRoot({ children }: { children: ReactNode }) {
 
 function LiveRoot({ children }: { children: ReactNode }) {
   const boot = use(liveBoot());
+  const [setUp, setSetUp] = useState(false);
 
   useEffect(() => {
     if (boot.kind === "signed_out") {
@@ -84,6 +106,15 @@ function LiveRoot({ children }: { children: ReactNode }) {
         }
       />
     );
+  }
+  // First sign-in (or a partner asked): choose your own username and password before anything else.
+  const me = boot.data.team.find((m) => m.id === boot.meId)!;
+  if (!me.credentials_set_at && !setUp) {
+    // A fresh load afterwards, so every screen sees the new username.
+    return <FirstLogin member={me} email={boot.email} actions={liveLoginActions(boot.email)} onDone={() => {
+      setSetUp(true);
+      location.reload();
+    }} />;
   }
   return (
     <NumuProvider live={{ data: boot.data, meId: boot.meId }}>

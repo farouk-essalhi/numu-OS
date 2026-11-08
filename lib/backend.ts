@@ -70,7 +70,9 @@ export async function loadDataset(sb: Supabase): Promise<Dataset> {
   const [deliverableTypes, team, clients, contacts, retainers, scopeLines, projects, deliverables, statusEvents, comments] =
     await Promise.all([
       all((a, b) => sb.from("deliverable_types").select("*").order("sort_order").range(a, b)),
-      all((a, b) => sb.from("team_members").select(cols("team", "id,user_id")).order("full_name").range(a, b)),
+      all((a, b) =>
+        sb.from("team_members").select(cols("team", "id,user_id,username,credentials_set_at")).order("full_name").range(a, b),
+      ),
       all((a, b) => sb.from("clients").select(cols("clients")).order("name_en").range(a, b)),
       all((a, b) => sb.from("contacts").select(cols("contacts")).order("full_name").range(a, b)),
       all((a, b) => sb.from("retainers").select(cols("retainers")).order("start_date").range(a, b)),
@@ -159,6 +161,20 @@ export async function deleteRows(sb: Supabase, entity: EntityKey, ids: string[])
     return { ok: false, reason: deleted ? `Deleted ${deleted} of ${ids.length}; you don't have permission for the rest` : "You don't have permission to delete these" };
   }
   return { ok: true };
+}
+
+/** The email Supabase Auth signs in with, for a username (or null). */
+export async function loginEmail(sb: Supabase, username: string): Promise<{ email: string | null; error: string | null }> {
+  const { data, error } = await sb.rpc("login_email", { p_username: username });
+  return { email: data ?? null, error: error ? friendlyError(error) : null };
+}
+
+/** The signed-in person's own username (and their setup marked done). */
+export async function setMyLogin(sb: Supabase, username: string): Promise<Result> {
+  const { error } = await sb.rpc("set_my_login", { p_username: username });
+  if (!error) return { ok: true };
+  if (error.code === "23505") return { ok: false, reason: "That username is taken" };
+  return { ok: false, reason: friendlyError(error) };
 }
 
 export async function insertComment(sb: Supabase, id: string, deliverableId: string, body: string): Promise<Result> {

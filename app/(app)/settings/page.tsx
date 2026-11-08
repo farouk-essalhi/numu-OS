@@ -1,6 +1,8 @@
 "use client";
 
-import { Eraser, LogOut, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
+import { Eraser, Monitor, Moon, RotateCcw, Sun } from "lucide-react";
+import { AccountCard } from "@/components/account";
+import { FirstLogin } from "@/components/shell/first-login";
 import { useState, type ReactNode } from "react";
 import { Avatar, Button, Card, CardHeader, PageHeader, Pill, Segmented } from "@/components/ui";
 import { useNumu } from "@/lib/store";
@@ -9,8 +11,31 @@ import { applyTheme, readTheme, type Theme } from "@/lib/theme";
 const ROLE_LABEL = { partner: "Partner", account_lead: "Account lead", creator: "Creator" } as const;
 
 export default function SettingsPage() {
-  const { me, role, data, viewAs, isDemo, signedIn, signOut, clearDemo, notify } = useNumu();
+  const [preview, setPreview] = useState(false);
+  const { me, role, data, viewAs, isDemo, signedIn, clearDemo, notify, setMyPassword, setMyUsername } = useNumu();
   const [theme, setTheme] = useState<Theme>(readTheme);
+
+  if (preview) {
+    // Demo: the screen people see on their first sign-in, against the demo data.
+    return (
+      <div className="fixed inset-0 z-[60] overflow-auto bg-bg">
+        <FirstLogin
+          member={{ ...me, username: null, credentials_set_at: null }}
+          email={me.email ?? ""}
+          actions={{
+            isTaken: async (u) => data.team.some((m) => m.id !== me.id && m.username === u),
+            setPassword: setMyPassword,
+            setUsername: setMyUsername,
+            signOut: () => setPreview(false),
+          }}
+          onDone={() => {
+            setPreview(false);
+            notify("Saved. In the live app they'd go straight to their work", "success");
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -54,21 +79,15 @@ export default function SettingsPage() {
           </div>
         </Card>
 
-        {signedIn ? (
-          <Card>
-            <CardHeader title="Account" subtitle={`Signed in as ${me.email}`} />
-            <div className="border-t border-line px-4 py-4 sm:px-5">
-              <Button onClick={() => void signOut()}>
-                <LogOut /> Sign out
-              </Button>
-            </div>
-          </Card>
-        ) : null}
+        <AccountCard />
 
         {isDemo && !signedIn ? (
           <Card>
             <CardHeader title="Demo" subtitle="Sign-in is off on this copy (local development): preview the app as anyone on the team" />
             <div className="divide-y divide-line border-t border-line">
+              <Row label="First sign-in screen">
+                <Button onClick={() => setPreview(true)}>Preview</Button>
+              </Row>
               <Row label="View as">
                 <select
                   value={me.id}

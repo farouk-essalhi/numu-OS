@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import { Suspense, useEffect, useState, type FormEvent } from "react";
 import { Logo } from "@/components/shell/app-shell";
+import { loginEmail } from "@/lib/backend";
 import { supabase, supabaseConfigured } from "@/lib/supabase";
 
 export default function LoginPage() {
@@ -45,7 +46,9 @@ export default function LoginPage() {
             <p className="text-[16px] font-semibold">NUMU OS</p>
           </div>
           <h1 className="text-[24px] font-semibold tracking-[-0.02em]">Sign in</h1>
-          <p className="mt-1 text-[14px] text-muted">Use the email and password NUMU gave you.</p>
+          <p className="mt-1 text-[14px] text-muted">
+            With your username and password. First time? Use the email and password NUMU gave you; you&apos;ll choose your own next.
+          </p>
           <Suspense>{supabaseConfigured ? <LoginForm /> : <SignInOff />}</Suspense>
         </div>
       </main>
@@ -80,17 +83,37 @@ function LoginForm() {
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
+    const login = String(form.get("login") ?? "").trim().toLowerCase();
+    // Spaces around a password are almost always a copy-paste accident (the
+    // setup screen trims them too, so nobody's password starts or ends with one).
+    const password = String(form.get("password") ?? "").trim();
     setPending(true);
     setError(null);
-    const { error } = await supabase().auth.signInWithPassword({
-      email: String(form.get("email") ?? "").trim().toLowerCase(),
-      password: String(form.get("password") ?? ""),
-    });
+    const mismatch = "That username and password don't match";
+
+    // A username is looked up; an email is used as it is.
+    let email = login;
+    if (!login.includes("@")) {
+      const found = await loginEmail(supabase(), login);
+      if (found.error) {
+        setPending(false);
+        return setError(found.error);
+      }
+      if (!found.email) {
+        setPending(false);
+        return setError(mismatch);
+      }
+      email = found.email;
+    }
+
+    const { error } = await supabase().auth.signInWithPassword({ email, password });
     if (error) {
       setPending(false);
       setError(
         /invalid login credentials/i.test(error.message)
-          ? "That email and password don't match"
+          ? login.includes("@")
+            ? "That email and password don't match"
+            : mismatch
           : /network|fetch/i.test(error.message)
             ? "Can't reach NUMU OS. Check your connection"
             : error.message,
@@ -104,13 +127,32 @@ function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="mt-7 space-y-4">
       <label className="block">
-        <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Email</span>
-        <input name="email" type="email" autoComplete="username" required placeholder="name@numu.test" className={field} />
+        <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Username</span>
+        <input
+          name="login"
+          type="text"
+          autoComplete="username"
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          required
+          placeholder="Your username (or email the first time)"
+          className={field}
+        />
       </label>
       <label className="block">
         <span className="mb-1.5 block text-[13px] font-medium text-ink-2">Password</span>
         <span className="relative block">
-          <input name="password" type={show ? "text" : "password"} autoComplete="current-password" required className={`${field} pr-11`} />
+          <input
+            name="password"
+            type={show ? "text" : "password"}
+            autoComplete="current-password"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+            className={`${field} pr-11`}
+          />
           <button
             type="button"
             onClick={() => setShow((s) => !s)}

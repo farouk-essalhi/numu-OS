@@ -327,12 +327,14 @@ export default function TeamPage() {
                     <p className="truncate text-[12px] text-muted">
                       {[
                         m.job_title,
-                        m.email,
+                        m.username ? `@${m.username}` : m.email,
                         isDemo
                           ? null
-                          : m.user_id
-                            ? "can sign in"
-                            : "no login yet",
+                          : !m.user_id
+                            ? "no login yet"
+                            : m.credentials_set_at
+                              ? null
+                              : "chooses a login at next sign-in",
                       ]
                         .filter(Boolean)
                         .join(" · ")}

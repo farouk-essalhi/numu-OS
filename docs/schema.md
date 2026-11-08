@@ -110,6 +110,8 @@ Everyone at NUMU, with or without a login.
 | --- | --- | --- |
 | id | uuid | |
 | user_id | uuid → auth.users | Unique. Linked by email |
+| username | text | Unique, lowercase, 3–30 characters. Chosen by the person (`public.set_my_login`); what they sign in with |
+| credentials_set_at | timestamptz | When they chose their username and password; null = asked at next sign-in |
 | full_name | text | |
 | email | text | Unique, case-insensitive. Used to link the login |
 | phone | text | |
