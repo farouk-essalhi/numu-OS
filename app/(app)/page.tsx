@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CalendarClock, Hourglass, ListChecks, RotateCcw, TriangleAlert } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { BigTasksCard } from "@/components/big-tasks";
+import { SetupCard } from "@/components/setup-card";
 import { Donut, Legend, Sparkbars, StackedColumns, TickMeter, type Series } from "@/components/charts";
 import {
   Avatar,
@@ -37,6 +38,7 @@ import {
 import { planningWeek } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import { STATUS_META } from "@/lib/workflow";
+import { clientHref, taskHref } from "@/lib/routes";
 
 const STAGE_SERIES: Series[] = [
   { key: "production", label: "In production", color: "var(--series-1)" },
@@ -48,6 +50,7 @@ const STAGE_SERIES: Series[] = [
 export default function OverviewPage() {
   const { rows, data, me, today, thisMonth, hour, now } = useNumu();
   const [nowMs] = useState(() => now.getTime());
+  const [allAttention, setAllAttention] = useState(false);
 
   const kpis = useMemo(() => overviewKpis(rows, data, today), [rows, data, today]);
   const delivery = useMemo(() => deliveryByDay(rows, thisMonth), [rows, thisMonth]);
@@ -81,6 +84,8 @@ export default function OverviewPage() {
           </>
         }
       />
+
+      <SetupCard />
 
       {/* KPI row */}
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -138,15 +143,16 @@ export default function OverviewPage() {
 
       {/* Delivery + mix */}
       <div className="mt-4 grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
+        <Card className="flex flex-col xl:col-span-2">
           <CardHeader
             title={`Delivery · ${formatMonth(thisMonth)}`}
             subtitle="Deliverables due on each working day, by where they are now"
             action={<CardLink href="/deliverables">Board</CardLink>}
           />
-          <div className="px-4 pb-4 sm:px-5">
+          <div className="flex flex-1 flex-col px-4 pb-4 sm:px-5">
             <Legend series={STAGE_SERIES} className="mb-4" />
             <StackedColumns
+              height="fill"
               title={`Deliverables due per working day in ${formatMonth(thisMonth)}`}
               series={STAGE_SERIES}
               marker={todayInMonth}
@@ -198,7 +204,7 @@ export default function OverviewPage() {
               const pct = percent(c.done, c.total);
               return (
                 <li key={c.client.id}>
-                  <Link href={`/clients/${c.client.id}`} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-3 hover:bg-surface-2 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] sm:px-5">
+                  <Link href={clientHref(c.client.id)} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 px-4 py-3 hover:bg-surface-2 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] sm:px-5">
                     <span className="flex min-w-0 items-center gap-3">
                       <Avatar name={c.client.name_en} size={32} square />
                       <span className="min-w-0">
@@ -235,10 +241,10 @@ export default function OverviewPage() {
           {attention.length === 0 ? (
             <Empty>All clear. Nothing late or stuck.</Empty>
           ) : (
-            <ul className="scroll-thin max-h-[352px] divide-y divide-line overflow-y-auto border-t border-line">
-              {attention.slice(0, 12).map(({ row, reason }) => (
+            <ul className="divide-y divide-line border-t border-line">
+              {attention.slice(0, allAttention ? 40 : 6).map(({ row, reason }) => (
                 <li key={`${reason}-${row.id}`}>
-                  <Link href={`/deliverables/${row.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-2 sm:px-5">
+                  <Link href={taskHref(row.id)} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-2 sm:px-5">
                     <ReasonIcon reason={reason} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13.5px] font-medium">{row.title}</span>
@@ -256,6 +262,17 @@ export default function OverviewPage() {
                   </Link>
                 </li>
               ))}
+              {attention.length > 6 ? (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => setAllAttention((v) => !v)}
+                    className="flex h-10 w-full items-center justify-center text-[12.5px] font-medium text-muted hover:bg-surface-2 hover:text-ink"
+                  >
+                    {allAttention ? "Show fewer" : `Show all ${attention.length}`}
+                  </button>
+                </li>
+              ) : null}
             </ul>
           )}
         </Card>
@@ -286,14 +303,14 @@ export default function OverviewPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Upcoming deadlines" subtitle="Due for client review in the next 7 days" action={<CardLink href="/calendar">Calendar</CardLink>} />
+          <CardHeader title="Upcoming deadlines" subtitle="Due in the next 7 days" action={<CardLink href="/calendar">Calendar</CardLink>} />
           {next.length === 0 ? (
             <Empty>Nothing due in the next week.</Empty>
           ) : (
             <ul className="divide-y divide-line border-t border-line">
               {next.slice(0, 6).map((r) => (
                 <li key={r.id}>
-                  <Link href={`/deliverables/${r.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2 sm:px-5">
+                  <Link href={taskHref(r.id)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2 sm:px-5">
                     <span className="grid w-10 shrink-0 place-items-center rounded-lg border border-line py-1 text-center leading-tight">
                       <span className="text-[10.5px] text-muted uppercase">{weekdayShort(r.due_date)}</span>
                       <span className="text-[14px] font-semibold num">{dayNumber(r.due_date)}</span>
@@ -320,7 +337,7 @@ export default function OverviewPage() {
                   <p className="leading-snug text-ink-2">
                     <span className="font-medium text-ink">{a.who ? firstName(a.who) : "System"}</span>{" "}
                     {a.kind === "comment" ? "commented on" : a.kind === "created" ? "created" : "moved"}{" "}
-                    <Link href={`/deliverables/${a.row.id}`} className="font-medium text-ink hover:underline">
+                    <Link href={taskHref(a.row.id)} className="font-medium text-ink hover:underline">
                       {a.row.title}
                     </Link>
                     {a.toStatus ? (

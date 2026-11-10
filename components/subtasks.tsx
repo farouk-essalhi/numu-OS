@@ -10,6 +10,7 @@ import { canPlan, useNumu } from "@/lib/store";
 import type { DeliverableStatus } from "@/lib/types";
 import { isDone, STATUS_META } from "@/lib/workflow";
 import { Avatar, Button, Card, CardHeader, Progress } from "./ui";
+import { taskHref } from "@/lib/routes";
 
 /**
  * A task's subtasks: each with its own owner, due date and step, ticked off
@@ -150,7 +151,7 @@ export function SubtasksCard({ row }: { row: BoardRow }) {
               </button>
               <div className="min-w-0 flex-1">
                 <Link
-                  href={`/deliverables/${s.id}`}
+                  href={taskHref(s.id)}
                   className={cn("block truncate text-[13.5px] hover:underline", state === "done" ? "text-muted line-through" : "font-medium text-ink")}
                 >
                   {s.title}

@@ -9,6 +9,7 @@ import { firstName } from "@/lib/format";
 import { ledClientIds, type BoardRow } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import type { DeliverableStatus } from "@/lib/types";
+import { taskHref } from "@/lib/routes";
 
 export default function ApprovalsPage() {
   const { rows, data, me, role, today, now, move } = useNumu();
@@ -66,9 +67,11 @@ export default function ApprovalsPage() {
                         <Button size="sm" onClick={() => act(r, "editing")}>
                           <RotateCcw /> Back to editing
                         </Button>
-                        <Button size="sm" variant="primary" onClick={() => act(r, "client_review")} disabled={!me.can_send_to_client} title={me.can_send_to_client ? undefined : "Sending to the client needs permission"}>
-                          <Send /> Send to client
-                        </Button>
+                        {me.can_send_to_client ? (
+                          <Button size="sm" variant="primary" onClick={() => act(r, "client_review")}>
+                            <Send /> Send to client
+                          </Button>
+                        ) : null}
                       </>
                     ) : (
                       <span className="text-[12px] text-muted">{r.statusSince ? `since ${timeAgo(r.statusSince, nowMs)}` : ""}</span>
@@ -103,12 +106,16 @@ export default function ApprovalsPage() {
                       </Pill>
                       {isLead ? (
                         <>
-                          <Button size="sm" onClick={() => act(r, "editing")} title="Client asked for changes (counts a revision)" disabled={!me.can_send_to_client}>
-                            <RotateCcw /> Changes
-                          </Button>
-                          <Button size="sm" variant="primary" onClick={() => act(r, "approved")} disabled={!me.can_approve} title={me.can_approve ? undefined : "Only people allowed to approve (Team → Permissions)"}>
-                            <Check /> Approved
-                          </Button>
+                          {me.can_send_to_client ? (
+                            <Button size="sm" onClick={() => act(r, "editing")} title="Client asked for changes (counts a revision)">
+                              <RotateCcw /> Changes
+                            </Button>
+                          ) : null}
+                          {me.can_approve ? (
+                            <Button size="sm" variant="primary" onClick={() => act(r, "approved")}>
+                              <Check /> Approved
+                            </Button>
+                          ) : null}
                         </>
                       ) : null}
                     </>
@@ -125,11 +132,11 @@ export default function ApprovalsPage() {
 
 function ApprovalRow({ r, actions, today, error }: { r: BoardRow; actions: ReactNode; today: string; error?: string }) {
   return (
-    <li className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center sm:px-5">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
+    <li className="flex flex-col gap-3 px-4 py-3.5 sm:px-5 2xl:flex-row 2xl:items-center">
+      <div className="flex min-w-0 flex-1 items-start gap-3">
         {r.owner ? <Avatar name={r.owner.full_name} size={32} /> : null}
         <div className="min-w-0">
-          <Link href={`/deliverables/${r.id}`} className="block truncate text-[13.5px] font-medium hover:underline">
+          <Link href={taskHref(r.id)} className="line-clamp-2 text-[13.5px] leading-snug font-medium hover:underline">
             {r.title}
           </Link>
           <p className="truncate text-[12px] text-muted">
@@ -140,7 +147,7 @@ function ApprovalRow({ r, actions, today, error }: { r: BoardRow; actions: React
           {error ? <p className="mt-1 text-[12px] text-critical">{error}</p> : null}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2 pl-11 sm:pl-0">{actions}</div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 pl-11 2xl:pl-0">{actions}</div>
     </li>
   );
 }

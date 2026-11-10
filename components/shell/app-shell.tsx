@@ -26,11 +26,13 @@ import { attentionItems } from "@/lib/insights";
 import { ledClientIds, myWork } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import { applyTheme, readTheme } from "@/lib/theme";
-import { NewDeliverableSheet } from "../new-deliverable-sheet";
+import { CommandPalette, NewDeliverableSheet, useIdle } from "../lazy";
 import { Avatar, Button, CountBadge, IconButton, Kbd } from "../ui";
-import { CommandPalette } from "./command-palette";
 import { PullToRefresh, SyncButton } from "./sync";
 import { isActive, MOBILE_TABS, NAV, SETTINGS_ITEM, titleFor, type BadgeKey, type NavItem } from "./nav";
+import { closeNewTask, newTaskSignal, openNewTask } from "@/lib/new-task";
+import { taskHref } from "@/lib/routes";
+import { useSignal } from "@/lib/signals";
 
 const ROLE_LABEL = { partner: "Partner", account_lead: "Account lead", creator: "Creator" } as const;
 const COLLAPSE_KEY = "numu.sidebar.collapsed";
@@ -47,8 +49,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
   const [drawer, setDrawer] = useState(false);
   const [palette, setPalette] = useState(false);
-  const [newOpen, setNewOpen] = useState(false);
   const canCreate = me.can_create_tasks;
+  // "New task" opens from anywhere (lib/new-task.ts), sometimes with fields filled in.
+  const newTask = useSignal(newTaskSignal);
+  const [lastPreset, setLastPreset] = useState(newTask);
+  if (newTask && newTask !== lastPreset) setLastPreset(newTask);
+  // The panels' code arrives once the page is up (components/lazy.tsx).
+  const panels = useIdle(palette || newTask !== null);
 
   const work = useMemo(() => myWork(rows, data, me.id, role, today), [rows, data, me.id, role, today]);
   const badges: Record<BadgeKey, number> = {
@@ -56,16 +63,32 @@ export function AppShell({ children }: { children: ReactNode }) {
     approvals: role === "creator" ? 0 : work.signOff.length + work.waitingOnClient.filter((r) => r.flags.waitingOnClient).length,
   };
 
+  // Keyboard: ⌘K search, N new task, / the page's filter (or search).
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPalette((p) => !p);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey || e.defaultPrevented) return;
+      const el = e.target as HTMLElement | null;
+      const typing = el?.closest("input, textarea, select, [contenteditable=true]");
+      const inPanel = document.querySelector("[role=dialog], [data-vaul-drawer]");
+      if (typing || inPanel) return;
+      if (e.key.toLowerCase() === "n" && canCreate) {
+        e.preventDefault();
+        openNewTask();
+      } else if (e.key === "/") {
+        e.preventDefault();
+        const filter = document.querySelector<HTMLInputElement>("[data-page-filter]");
+        if (filter) filter.focus();
+        else setPalette(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [canCreate]);
 
   // The count in the browser tab, so a pinned tab shows when something needs you.
   const pageTitle = titleFor(pathname);
@@ -90,7 +113,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     });
   }
 
-  const sidebarProps = { badges, canCreate, onNew: () => setNewOpen(true), onSearch: () => setPalette(true) };
+  const sidebarProps = { badges, canCreate, onNew: () => openNewTask(), onSearch: () => setPalette(true) };
 
   return (
     <div className="app-in min-h-dvh">
@@ -125,7 +148,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           title={titleFor(pathname)}
           onMenu={() => setDrawer(true)}
           onSearch={() => setPalette(true)}
-          onNew={canCreate ? () => setNewOpen(true) : undefined}
+          onNew={canCreate ? () => openNewTask() : undefined}
           me={me.full_name}
           role={ROLE_LABEL[role]}
         />
@@ -133,8 +156,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <MobileTabs badges={badges} />
-      <CommandPalette open={palette} onClose={() => setPalette(false)} />
-      {canCreate ? <NewDeliverableSheet open={newOpen} onOpenChange={setNewOpen} /> : null}
+      {panels ? <CommandPalette open={palette} onClose={() => setPalette(false)} /> : null}
+      {panels && canCreate ? (
+        <NewDeliverableSheet open={newTask !== null} preset={lastPreset ?? undefined} onOpenChange={(o) => (o ? openNewTask() : closeNewTask())} />
+      ) : null}
     </div>
   );
 }
@@ -171,7 +196,7 @@ function Sidebar({
 
   const item = (it: NavItem) => {
     if (it.leadsOnly && role === "creator") return null;
-    const active = isActive(pathname, it.href);
+    const active = isActive(pathname, it);
     const count = it.badge ? badges[it.badge] : 0;
     return (
       <Link
@@ -239,11 +264,12 @@ function Sidebar({
           <Button
             variant="primary"
             onClick={onNew}
-            title="New task"
+            title="New task (N)"
             className={cn("w-full", compact !== "never" && "px-0", compact === "below-lg" && "lg:px-3.5")}
           >
             <Plus />
-            <span className={label}>New task</span>
+            <span className={cn("flex-1 text-left", label)}>New task</span>
+            <span className={cn("rounded border border-current/25 px-1 text-[10.5px] leading-4 font-medium opacity-70", label)}>N</span>
           </Button>
         ) : null}
       </div>
@@ -438,7 +464,7 @@ function Notifications() {
             {items.length === 0 ? <li className="px-4 py-8 text-center text-[13px] text-muted">All clear.</li> : null}
             {items.map(({ row, reason }) => (
               <li key={`${reason}-${row.id}`}>
-                <Link href={`/deliverables/${row.id}`} onClick={() => setOpen(false)} className="flex gap-3 px-4 py-3 hover:bg-surface-2">
+                <Link href={taskHref(row.id)} onClick={() => setOpen(false)} className="flex gap-3 px-4 py-3 hover:bg-surface-2">
                   <span
                     className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg [&>svg]:size-4"
                     style={{
@@ -476,7 +502,7 @@ function MobileTabs({ badges }: { badges: Record<BadgeKey, number> }) {
       className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-line bg-[color-mix(in_oklab,var(--surface)_92%,transparent)] pb-[env(safe-area-inset-bottom)] backdrop-blur-xl md:hidden"
     >
       {MOBILE_TABS.map((t) => {
-        const active = isActive(pathname, t.href);
+        const active = isActive(pathname, t);
         const count = t.badge ? badges[t.badge] : 0;
         return (
           <Link

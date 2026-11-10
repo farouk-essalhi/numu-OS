@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { ChevronRight, ExternalLink, LoaderCircle, Mail, MessageCircle, Pencil, Plus, Sparkles } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { DeliverableTable } from "@/components/deliverables";
-import { EditSheet, type Edit } from "@/components/entity-forms";
+import type { Edit } from "@/components/entity-forms";
+import { EditSheet } from "@/components/lazy";
 import { Avatar, Button, ButtonLink, Card, Empty, Pill, Progress, Tabs, TONE_ICON } from "@/components/ui";
 import { addMonths, dayNumber, formatMonth, formatShort } from "@/lib/dates";
 import { firstName, formatMoney, percent, PLATFORM_LABEL } from "@/lib/format";
 import { clientSummaries, HEALTH_META } from "@/lib/insights";
+import { openNewTask } from "@/lib/new-task";
 import { canPlan, useNumu } from "@/lib/store";
 import type { Retainer } from "@/lib/types";
 import { isDone } from "@/lib/workflow";
@@ -19,8 +21,8 @@ type Tab = "work" | "scope" | "people" | "campaigns";
 const RETAINER_STATUS_LABEL: Record<Retainer["status"], string> = { active: "Active", draft: "Draft", paused: "Paused", ended: "Ended" };
 
 export default function ClientPage() {
-  const { id } = useParams<{ id: string }>();
-  const { rows, data, role, today, thisMonth } = useNumu();
+  const id = useSearchParams().get("id") ?? "";
+  const { rows, data, me, role, today, thisMonth } = useNumu();
   const [tab, setTab] = useState<Tab>("work");
   const [edit, setEdit] = useState<Edit | null>(null);
   const summary = useMemo(() => clientSummaries(rows, data, thisMonth, today).find((c) => c.client.id === id), [rows, data, thisMonth, today, id]);
@@ -114,6 +116,11 @@ export default function ClientPage() {
           {plans ? (
             <Button onClick={() => setEdit({ kind: "client", row: client })}>
               <Pencil /> Edit
+            </Button>
+          ) : null}
+          {me.can_create_tasks && client.status !== "ended" ? (
+            <Button variant="primary" onClick={() => openNewTask({ clientId: client.id })}>
+              <Plus /> New task
             </Button>
           ) : null}
         </div>

@@ -28,6 +28,7 @@ Phase 0 gate (all must be true before Phase 1 starts):
 - [x] One-off projects: create and edit (the first real campaign goes in here)
 - [x] Team members: add/edit (partners); board drag and drop by status and by person
 - [x] Tasks next to deliverables (follow-ups, reports, content calendars, meetings), recurring through the monthly scope
+- [x] Speed and polish pass (10 Nov): static hosting, instant open, tick-to-done with undo, board that fits the screen, grouped lists, quicker New task
 - [ ] Enter every active client, retainer and scope; generate December
 
 Phase 1 gate: all active clients and December deliverables are in the system; the whole team used My work every day for a week; two weeks alongside ClickUp with nothing missing.
@@ -43,7 +44,9 @@ Later phases (do not build yet): 2 Money (Dec 6–19), 3 Clients in the loop (De
 - **Record decisions.** Anything that changes behaviour, the schema or scope gets one line in `docs/decisions.md`.
 - **After each module:** review what you built against the gate checklist above and list anything missing or risky.
 - Run `scripts/db/test.sh` before pushing any database change, and `npm run lint && npm test && npm run build` before pushing app changes.
-- **This Next.js (16.x) differs from older versions** (Cache Components, routes kept mounted with `<Activity>`, `use(browser())`). Read the relevant guide in `node_modules/next/dist/docs/` before writing Next.js code (see `AGENTS.md`).
+- **This Next.js (16.x) differs from older versions.** Read the relevant guide in `node_modules/next/dist/docs/` before writing Next.js code (see `AGENTS.md`).
+- **The app is a static export** (`output: "export"`, decision 50): there is no server. No route handlers, server actions, `proxy.ts`, Cache Components or `[id]` routes; a page that needs an id reads it from the query string (`/task?id=`, `/client?id=`, built with `lib/routes.ts`). Everything renders in the browser behind `use(browser())` (`components/shell/app-root.tsx`).
+- **Keep it fast** (decisions 50–51). Panels that open on demand are imported through `components/lazy.tsx`, never straight into a page. Bump `VERSION` in `lib/cache.ts` whenever the shape of `Dataset` changes, so an old saved copy is never read by new code. Actions in `lib/store.tsx` read the latest data from the store, not from a render.
 
 ## Users and roles
 
@@ -54,7 +57,7 @@ Later phases (do not build yet): 2 Money (Dec 6–19), 3 Clients in the loop (De
 | `creator` | Everyone making content | See clients, scope and the whole board; move cards; comment. **No fees** |
 | `client` | Approvers at each client | Phase 1: their own client and contact row only. Phase 3: portal |
 
-**Sign-in (decisions 33–35, 47):** Supabase Auth with password. People sign in with a **username they chose** (or their email); `public.login_email()` maps a username to the email Auth uses. A partner adds the person in Team (app), then creates their login in the Supabase dashboard (Authentication → Users → Add user, auto-confirm) with the same email and a temporary password; the trigger links them. On their first sign-in (`team_members.credentials_set_at` is null) `components/shell/first-login.tsx` makes them choose a username and password before anything else; partners can ask someone to do it again (Team → People → edit). The browser holds the session (`lib/supabase.ts`, publishable key only) and `components/shell/app-root.tsx` sends anyone without one to `/login`; every read and write goes through RLS as that person. Pages are static shells with no data. Don't add a `proxy.ts`: Netlify's Next.js plugin (5.16.6) packages it in a way its function upload rejects (deploys fail with HTTP 500). Without `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (local dev, tests) the app runs on demo data and Settings has "View as". Never commit passwords; the service role key is never used by the app.
+**Sign-in (decisions 33–35, 47):** Supabase Auth with password. People sign in with a **username they chose** (or their email); `public.login_email()` maps a username to the email Auth uses. A partner adds the person in Team (app), then creates their login in the Supabase dashboard (Authentication → Users → Add user, auto-confirm) with the same email and a temporary password; the trigger links them. On their first sign-in (`team_members.credentials_set_at` is null) `components/shell/first-login.tsx` makes them choose a username and password before anything else; partners can ask someone to do it again (Team → People → edit). The browser holds the session (`lib/supabase.ts`, publishable key only) and `components/shell/app-root.tsx` sends anyone without one to `/login`; every read and write goes through RLS as that person. Pages are static shells with no data, served as plain files (decision 50), so there is no server-side guard to add. The app opens from a copy of the last loaded data kept in the browser and refreshes at once (decision 51); the copy is wiped on sign-out and whenever the sign-in ends. Without `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (local dev, tests) the app runs on demo data and Settings has "View as". Never commit passwords; the service role key is never used by the app.
 
 A team member's role is `team_members.access_level`. A client login is a `contacts` row with a `user_id`. There is no separate profiles table. NUMU OS is **invite-only**: a partner adds the person with their email, then invites that email; the login links to the person by email automatically. Signups are off.
 
@@ -115,12 +118,17 @@ supabase/tests/           pgTAP tests (generator, workflow, access per role)
 scripts/db/               run migrations + tests on plain Postgres (no Docker)
 app/(app)/                pages: overview, my-work, approvals, deliverables, calendar, clients, campaigns, team, reports, settings
 components/shell/         sidebar, top bar, phone tab bar, ⌘K command palette, navigation config
-components/               ui.tsx (primitives), charts.tsx, deliverables.tsx (table, stepper), board.tsx (drag-and-drop board),
-                          forms.tsx + entity-forms.tsx (sheets to add/edit clients, contacts, retainers, scope, campaigns, team),
-                          new-deliverable-sheet.tsx; shell/app-root.tsx (session guard, live vs demo)
+components/               ui.tsx (primitives), charts.tsx, deliverables.tsx (grouped table/list, tick, undo, stepper),
+                          board.tsx (drag-and-drop board), forms.tsx (fields) + sheet.tsx (sliding panel) + entity-forms.tsx
+                          (add/edit clients, contacts, retainers, scope, campaigns, team), new-deliverable-sheet.tsx,
+                          lazy.tsx (panels loaded on demand), setup-card.tsx (Overview while data is being entered);
+                          shell/app-root.tsx (session guard, live vs demo)
 lib/                      types (mirror the DB), dates (Doha), workflow rules, selectors, insights (dashboard numbers),
                           store (one API, live or demo), backend (Supabase reads/writes), supabase (browser client),
+                          cache (saved copy for instant open), signals (small shared values), routes (task/client links),
+                          new-task (open the New task panel from anywhere), hooks (media query, remembered state),
                           database.types (generated), generator (demo copy of the monthly generator)
+scripts/web/              serve-out.mjs: serves the static build the way Netlify does (npm start)
 lib/demo/                 demo data for local dev and tests (fictional clients; the team's first names)
 app/login/                sign-in page (Supabase email + password)
 mcp/                      Claude connection (phase 5)
@@ -131,7 +139,8 @@ mcp/                      Claude connection (phase 5)
 ```bash
 npm run dev             # app on http://localhost:3000 (demo data unless NEXT_PUBLIC_SUPABASE_* are set)
 npm test                # unit tests: dates, workflow rules, selectors, demo data
-npm run lint && npm run typecheck && npm run build
+npm run lint && npm run typecheck && npm run build   # build writes the static site to out/
+npm start               # serve out/ like Netlify does (redirects included), http://localhost:3100
 
 # Database tests on any Postgres 15+ with pgTAP (no Docker). Uses PG* env vars.
 scripts/db/test.sh
@@ -140,9 +149,9 @@ scripts/db/test.sh
 # so redeploy after changing). Logins: Supabase dashboard → Authentication → Users.
 
 # Deploy: Netlify project "numu-os" (https://numu-os.netlify.app), built by Netlify from
-# netlify.toml (npm run build, publish .next, @netlify/plugin-nextjs). Not connected to Git yet:
-# each deploy is an upload, so pushes do not redeploy. Without the plugin it publishes the raw
-# .next folder and every page 404s.
+# netlify.toml (npm run build, publish out/, no Next.js plugin: NETLIFY_NEXT_PLUGIN_SKIP=true).
+# Redirects for old addresses and cache headers live in netlify.toml. Not connected to Git yet:
+# each deploy is an upload, so pushes do not redeploy.
 
 # Or the full local Supabase stack (needs Docker)
 supabase start          # API, Studio, local inbox for magic links
@@ -163,7 +172,8 @@ Calm and fast. One clear number per screen (each dashboard opens on the number t
 The visual language, adapted from the product dashboards Farouk shared (Efferd, Nexora, Wiko, VERIQ, Nakdis). Tokens live in `app/globals.css`:
 - **Shell** (`components/shell/`): left sidebar with grouped navigation and count badges (full width from 1024px, icon rail from 768px, a drawer on phones); top bar with breadcrumb, ⌘K search, theme toggle and "Needs you" notifications; on phones a bottom tab bar (Overview, My work, Board, Approvals).
 - **Surfaces**: white cards with hairline borders on a soft plane, ink for primary actions, NUMU orange only for the brand mark and attention badges. Dark mode is its own tuned palette, not an inversion.
-- **Data**: KPI cards show the change vs the previous period; lists are sortable tables with tabs on desktop and cards on phones; the board has a board/list toggle; a status is a neutral pill with a coloured dot (`STATUS_META[status].color`).
+- **Data**: KPI cards show the change vs the previous period; lists are sortable tables on desktop and cards on phones, in groups that fold (only one of the two is drawn); the board has a board/list toggle and, from tablets up, fills the screen with columns that scroll on their own; a status is a neutral pill with a coloured dot (`STATUS_META[status].color`).
+- **Doing**: tasks have a round tick wherever they appear; a move that is clean to reverse offers Undo (decision 52). `N` opens New task, `/` goes to the page's filter, `⌘K` searches, `⌘/Ctrl + Enter` saves a form.
 - **Charts** (`components/charts.tsx`) follow the data-viz rules: categorical colours in fixed order (blue, orange, aqua, yellow), bars at most 24px with 4px rounded ends and 2px gaps, a legend for two or more series, hover/focus tooltips and a hidden data table. Status colours (good, warning, serious, critical) are reserved and always come with an icon and a label.
 - Every screen must work at 390px (phone), 768–1023px (tablet) and 1440px (desktop), in light and dark. Check all three before pushing UI changes.
 - Use the existing components (`components/ui.tsx`, `charts.tsx`, `deliverables.tsx`) before adding new ones.

@@ -97,7 +97,7 @@ export function PermissionsPanel() {
         />
 
         {/* Desktop and tablet: one row per person */}
-        <div className="scroll-thin hidden overflow-x-auto border-t border-line md:block">
+        <div className="scroll-thin relative hidden overflow-x-auto border-t border-line md:block">
           <table className="w-full min-w-[640px] text-[13px]">
             <thead className="border-b border-line bg-surface-2 text-left text-[12px] text-muted">
               <tr>

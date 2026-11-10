@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { Pencil, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { EditSheet, type Edit } from "@/components/entity-forms";
+import type { Edit } from "@/components/entity-forms";
+import { EditSheet } from "@/components/lazy";
 import { Avatar, Button, Card, Empty, IconButton, PageHeader, Pill, Progress } from "@/components/ui";
 import { daysBetween, formatShort } from "@/lib/dates";
 import { formatMoney, percent } from "@/lib/format";

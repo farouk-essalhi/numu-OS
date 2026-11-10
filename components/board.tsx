@@ -13,23 +13,26 @@
 // column changes.
 
 import Link from "next/link";
-import { Check, ChevronLeft, ChevronRight, Lock, UserRound } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Lock, Plus, TriangleAlert, UserRound } from "lucide-react";
 import {
   useEffect,
   useRef,
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { formatRelative } from "@/lib/dates";
 import { cn, PLATFORM_LABEL } from "@/lib/format";
+import { useMediaQuery } from "@/lib/hooks";
 import type { BoardRow } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import type { IsoDate } from "@/lib/types";
-import { flowFor, isDone, STATUS_META, statusIndex } from "@/lib/workflow";
-import { FlagPills, type Selection } from "./deliverables";
+import { flowFor, isDone, isTaskType, STATUS_META, statusIndex } from "@/lib/workflow";
+import { FlagPills, TaskTick, type Selection } from "./deliverables";
 import { Avatar, Empty } from "./ui";
+import { taskHref } from "@/lib/routes";
 
 export interface BoardColumn {
   key: string;
@@ -37,11 +40,14 @@ export interface BoardColumn {
   color?: string;
   avatar?: string;
   rows: BoardRow[];
+  /** Shows a "+" on the column: add a task here (for this person, this client…). */
+  onAdd?: () => void;
 }
 
 export type DropCheck = { ok: true } | { ok: false; reason: string };
 
-const COLUMN_LIMIT = 10;
+const COLUMN_LIMIT = 10; // phones: the page scrolls, so long columns fold
+const COLUMN_LIMIT_FIT = 60; // bigger screens: each column scrolls on its own
 const MAGNET_RADIUS = 260; // px from the slot where the pull starts
 const LOCK_AT = 0.45; // pull strength that counts as "locked on"
 
@@ -123,6 +129,10 @@ export function KanbanBoard({
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [drag, setDrag] = useState<DragState | null>(null);
   const [landed, setLanded] = useState<{ id: string; to: string } | null>(null);
+  // From tablets up the board fills the rest of the screen and each column
+  // scrolls on its own, so the headers and the sideways scrollbar stay in view.
+  const roomy = useMediaQuery("(min-width: 768px)");
+  const [fit, setFit] = useState<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
@@ -158,6 +168,26 @@ export function KanbanBoard({
       ro.disconnect();
     };
   }, [hasBoard, columns.length]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !roomy) return;
+    const measure = () => {
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      // Leaves room for the hint line under the board.
+      setFit(Math.max(360, Math.round(window.innerHeight - top - 44)));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    // Anything above the board changing height (filters wrapping, a banner) moves it.
+    const page = el.closest("main");
+    const ro = new ResizeObserver(measure);
+    if (page) ro.observe(page);
+    return () => {
+      window.removeEventListener("resize", measure);
+      ro.disconnect();
+    };
+  }, [hasBoard, roomy]);
 
   function nudge(dir: -1 | 1) {
     scrollRef.current?.scrollBy({ left: dir * 560, behavior: "smooth" });
@@ -254,6 +284,7 @@ export function KanbanBoard({
       const hand = { x: s.x - s.grabDX, y: s.y - s.grabDY };
       let target = hand;
       let pull = 0;
+      if (s.overOk && slotRef.current) keepInView(slotRef.current);
       const slot = s.overOk ? slotRef.current?.getBoundingClientRect() : null;
       if (slot) {
         const dx = hand.x + s.w / 2 - (slot.left + slot.width / 2);
@@ -312,6 +343,16 @@ export function KanbanBoard({
     }
     apply(s);
     s.raf = requestAnimationFrame(tick);
+  }
+
+  /** Scroll a column so the landing slot is on screen (a little each frame, so it glides). */
+  function keepInView(el: HTMLElement) {
+    const box = el.closest<HTMLElement>("[data-col-scroll]");
+    if (!box) return;
+    const b = box.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    const over = r.top < b.top + 6 ? r.top - b.top - 6 : r.bottom > b.bottom - 6 ? r.bottom - b.bottom + 6 : 0;
+    if (over) box.scrollTop += Math.abs(over) < 2 ? over : over * 0.3;
   }
 
   function spring(
@@ -517,9 +558,11 @@ export function KanbanBoard({
         ref={scrollRef}
         className={cn(
           "scroll-thin flex items-start gap-3 overflow-x-auto px-4 pb-4 sm:px-0",
+          roomy && "overflow-y-hidden",
           selection && "selecting",
           !dragging && "snap-x snap-mandatory md:snap-none",
         )}
+        style={roomy && fit ? { height: fit } : undefined}
       >
         {columns.map((col, ci) => {
           const empty = col.rows.length === 0;
@@ -533,9 +576,11 @@ export function KanbanBoard({
           const blocked =
             isOver && drag?.check && !drag.check.ok ? drag.check.reason : null;
           const accent = col.color ?? "var(--focus)";
+          const limit = roomy ? COLUMN_LIMIT_FIT : COLUMN_LIMIT;
           const shown = expanded.has(col.key)
             ? col.rows
-            : col.rows.slice(0, COLUMN_LIMIT);
+            : col.rows.slice(0, limit);
+          const late = col.rows.filter((r) => r.flags.overdue).length;
           let slotAt = -1;
           if (ok && drag) {
             slotAt = shown.findIndex(
@@ -568,7 +613,7 @@ export function KanbanBoard({
               }}
               aria-label={`${col.title}, ${col.rows.length} tasks`}
               className={cn(
-                "relative flex shrink-0 snap-start flex-col rounded-xl border bg-surface-2 transition-[width,max-width,background-color,border-color,box-shadow] duration-200 ease-out",
+                "relative flex max-h-full shrink-0 snap-start flex-col rounded-xl border bg-surface-2 transition-[width,max-width,background-color,border-color,box-shadow] duration-200 ease-out",
                 slim
                   ? "w-11 max-w-11 cursor-default"
                   : "w-[82vw] max-w-[300px] sm:w-[272px]",
@@ -601,7 +646,7 @@ export function KanbanBoard({
                 </header>
               ) : (
                 <>
-                  <header className="flex items-center justify-between gap-2 px-3 py-2.5">
+                  <header className="flex h-11 shrink-0 items-center justify-between gap-2 px-3">
                     <span className="flex min-w-0 items-center gap-2">
                       {col.color ? (
                         <span
@@ -630,11 +675,37 @@ export function KanbanBoard({
                         {col.rows.length}
                       </span>
                     </span>
-                    <span className="shrink-0 text-[11.5px] text-muted num">
-                      {points} pts
+                    <span className="flex shrink-0 items-center gap-2 text-[11.5px] text-muted num">
+                      {late > 0 ? (
+                        <span
+                          className="inline-flex items-center gap-1 font-medium text-critical"
+                          title={`${late} late in ${col.title}`}
+                        >
+                          <TriangleAlert className="size-3" />
+                          {late} late
+                        </span>
+                      ) : null}
+                      <span>{points} pts</span>
+                      {col.onAdd && !selection ? (
+                        <button
+                          type="button"
+                          onClick={col.onAdd}
+                          aria-label={`New task in ${col.title}`}
+                          title={`New task in ${col.title}`}
+                          className="-mr-1.5 grid size-7 place-items-center rounded-md text-muted hover:bg-surface-3 hover:text-ink"
+                        >
+                          <Plus className="size-4" />
+                        </button>
+                      ) : null}
                     </span>
                   </header>
-                  <div className="space-y-2 px-2 pb-2">
+                  <div
+                    data-col-scroll
+                    className={cn(
+                      "space-y-2 px-2 pb-2",
+                      roomy && "scroll-thin min-h-0 flex-1 overflow-y-auto overscroll-contain pt-0.5",
+                    )}
+                  >
                     {shown.map((r, i) => {
                       const isDragged = drag?.row.id === r.id;
                       return (
@@ -646,7 +717,7 @@ export function KanbanBoard({
                           <Link
                             ref={isDragged ? holeRef : undefined}
                             aria-hidden={isDragged || undefined}
-                            href={`/deliverables/${r.id}`}
+                            href={taskHref(r.id)}
                             draggable={false}
                             onDragStart={(e) => e.preventDefault()}
                             onPointerDown={(e) => onPointerDown(e, r, col.key)}
@@ -665,6 +736,7 @@ export function KanbanBoard({
                               "transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-px hover:border-line-strong hover:shadow-md",
                               canDrop && "cursor-grab active:cursor-grabbing",
                               landed?.id === r.id ? "card-land" : "card-in",
+                              r.flags.overdue && "border-[color-mix(in_srgb,var(--critical)_40%,var(--line))]",
                               isDragged && "card-hole",
                               selection && "cursor-pointer",
                               selection?.ids.has(r.id) &&
@@ -699,6 +771,17 @@ export function KanbanBoard({
                               row={r}
                               today={today}
                               hideClient={hideClient}
+                              tick={
+                                !selection && isTaskType(r.deliverable_type) ? (
+                                  <TaskTick
+                                    row={r}
+                                    className="mt-px"
+                                    onDone={(done) =>
+                                      setLanded({ id: r.id, to: done ? "done" : "planned" })
+                                    }
+                                  />
+                                ) : null
+                              }
                             />
                           </Link>
                         </div>
@@ -715,7 +798,7 @@ export function KanbanBoard({
                         {dragging ? "Drop here" : "Empty"}
                       </p>
                     ) : null}
-                    {col.rows.length > COLUMN_LIMIT &&
+                    {col.rows.length > limit &&
                     !expanded.has(col.key) ? (
                       <button
                         type="button"
@@ -724,7 +807,7 @@ export function KanbanBoard({
                         }
                         className="w-full rounded-lg py-2 text-[12.5px] font-medium text-muted hover:bg-surface-3 hover:text-ink"
                       >
-                        Show {col.rows.length - COLUMN_LIMIT} more
+                        Show {col.rows.length - limit} more
                       </button>
                     ) : null}
                   </div>
@@ -763,7 +846,16 @@ export function KanbanBoard({
                 } as CSSProperties
               }
             >
-              <CardBody row={drag.row} today={today} hideClient={hideClient} />
+              <CardBody
+                row={drag.row}
+                today={today}
+                hideClient={hideClient}
+                tick={
+                  isTaskType(drag.row.deliverable_type) ? (
+                    <span className="mt-px size-5 shrink-0 rounded-full border-[1.5px] border-line-strong" />
+                  ) : null
+                }
+              />
               {drag.check && !drag.check.ok ? (
                 <p className="col-lock -mx-3 -mb-3 mt-3 flex items-start gap-1.5 border-t border-line bg-surface-2 px-3 py-2 text-[12px] font-medium text-critical">
                   <Lock className="mt-px size-3.5 shrink-0" />
@@ -783,10 +875,13 @@ function CardBody({
   row,
   today,
   hideClient,
+  tick,
 }: {
   row: BoardRow;
   today: IsoDate;
   hideClient?: boolean;
+  /** The round "done" tick, on task cards. */
+  tick?: ReactNode;
 }) {
   const meta = STATUS_META[row.status];
   return (
@@ -796,8 +891,14 @@ function CardBody({
         className="absolute inset-y-0 left-0 w-[3px]"
         style={{ background: meta.color }}
       />
-      <div className="flex items-start justify-between gap-2">
-        <p className="line-clamp-2 text-[13px] leading-snug font-medium">
+      <div className="flex items-start gap-2">
+        {tick}
+        <p
+          className={cn(
+            "line-clamp-2 min-w-0 flex-1 text-[13px] leading-snug font-medium",
+            row.status === "done" && "text-muted line-through decoration-line-strong",
+          )}
+        >
           {row.title}
         </p>
         {row.owner ? (

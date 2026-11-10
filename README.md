@@ -23,11 +23,14 @@ Works on desktop, tablet and phone. Without Supabase env vars it runs on demo da
 ```bash
 npm test           # unit tests
 npm run lint && npm run typecheck && npm run build
+npm start          # serve the built site (out/) the way Netlify does: http://localhost:3100
 ```
+
+The site is plain static files: `npm run build` writes them to `out/`, Netlify serves them from its CDN, and the browser talks to Supabase directly. There is no server to keep warm (see decisions 50 and 51 for why, and what the app keeps in the browser to open instantly).
 
 ## Signing in
 
-The live site uses Supabase logins (email + password). To add someone: a partner adds them in Team (with the email they'll sign in with), then creates their login in the Supabase dashboard → Authentication → Users → Add user (same email, a password, "Auto Confirm User" on). To reset a password, use the same screen. Passwords are never stored in this repo. Running locally without the Supabase env vars, sign-in is off.
+The live site uses Supabase logins: each person signs in with a username and password they chose (the first time, with the email and temporary password a partner gives them). To add someone: a partner adds them in Team (with the email they'll sign in with), then creates their login in the Supabase dashboard → Authentication → Users → Add user (same email, a password, "Auto Confirm User" on). To reset a password, use the same screen. Passwords are never stored in this repo. Running locally without the Supabase env vars, sign-in is off.
 
 ## Running the database tests
 

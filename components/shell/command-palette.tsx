@@ -8,6 +8,7 @@ import { useNumu } from "@/lib/store";
 import { STATUS_META } from "@/lib/workflow";
 import { Kbd } from "../ui";
 import { NAV, SETTINGS_ITEM } from "./nav";
+import { clientHref, taskHref } from "@/lib/routes";
 
 interface Result {
   key: string;
@@ -44,7 +45,7 @@ function Palette({ onClose }: { onClose: () => void }) {
     const clients: Result[] = data.clients
       .filter((c) => match(c.name_en) || (!!c.name_ar && c.name_ar.includes(q.trim())))
       .slice(0, 5)
-      .map((c) => ({ key: c.id, group: "Clients", label: c.name_en, hint: c.industry ?? undefined, href: `/clients/${c.id}`, icon: <Building2 className="size-4" /> }));
+      .map((c) => ({ key: c.id, group: "Clients", label: c.name_en, hint: c.industry ?? undefined, href: clientHref(c.id), icon: <Building2 className="size-4" /> }));
     const deliverables: Result[] = needle
       ? rows
           .filter((r) => match(r.title) || match(r.client.name_en))
@@ -55,7 +56,7 @@ function Palette({ onClose }: { onClose: () => void }) {
             group: "Tasks",
             label: r.title,
             hint: `${r.client.name_en} · ${STATUS_META[r.status].en}`,
-            href: `/deliverables/${r.id}`,
+            href: taskHref(r.id),
             icon: <FileText className="size-4" />,
           }))
       : [];

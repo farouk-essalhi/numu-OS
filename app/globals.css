@@ -165,7 +165,7 @@
   --color-critical: var(--critical-ink);
 
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --font-arabic: var(--font-plex-arabic), var(--font-geist), sans-serif;
 
   --shadow-sm: var(--shadow-sm);

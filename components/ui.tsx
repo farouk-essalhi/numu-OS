@@ -128,7 +128,7 @@ export function PageHeader({
   children?: ReactNode;
 }) {
   return (
-    <div className="mb-5 flex flex-col gap-3 sm:mb-6 md:flex-row md:items-end md:justify-between">
+    <div className="mb-4 flex flex-col gap-3 sm:mb-6 md:flex-row md:items-end md:justify-between">
       <div className="min-w-0">
         <h1 className="text-[22px] leading-tight font-semibold tracking-[-0.02em] sm:text-[24px]">{title}</h1>
         {subtitle ? <p className="mt-1 text-[13.5px] text-muted">{subtitle}</p> : null}

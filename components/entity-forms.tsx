@@ -21,7 +21,9 @@ import type {
   ScopeLine,
   TeamMember,
 } from "@/lib/types";
-import { badUrl, Check, control, Field, Input, moneyText, orNull, parseMoney, Select, Sheet, SheetForm, TextArea } from "./forms";
+import { badUrl, Check, control, Field, Input, moneyText, orNull, parseMoney, Select, TextArea } from "./forms";
+import { Sheet, SheetForm } from "./sheet";
+import { clientHref } from "@/lib/routes";
 
 /** Which form is open. `row` absent = a new one. */
 export type Edit =
@@ -116,7 +118,7 @@ function ClientForm({ row, onDone }: { row?: Client; onDone: () => void }) {
         drive_folder_url: orNull(f.drive_folder_url),
       },
       row ? "Client saved" : "Client added",
-      row ? undefined : () => router.push(`/clients/${id}`),
+      row ? undefined : () => router.push(clientHref(id)),
     );
   }
 

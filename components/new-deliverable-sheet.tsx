@@ -1,16 +1,18 @@
 "use client";
 
 import { X } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Drawer } from "vaul";
-import { addDays, dayNumber, isWorkingDay } from "@/lib/dates";
+import { addDays, dayNumber, dayOfWeek, formatLong, isWorkingDay } from "@/lib/dates";
 import { cn, PLATFORM_LABEL } from "@/lib/format";
 import { useMediaQuery } from "@/lib/hooks";
+import type { NewTaskPreset } from "@/lib/new-task";
 import { ledClientIds } from "@/lib/selectors";
 import { canPlan, useNumu } from "@/lib/store";
 import type { DeliverableTypeCode, Platform } from "@/lib/types";
 import { Check } from "./forms";
 import { Button, IconButton, Segmented } from "./ui";
+import { taskHref } from "@/lib/routes";
 
 const PLATFORMS: (Platform | "")[] = ["instagram", "tiktok", "snapchat", "youtube", "x", "linkedin", "facebook", ""];
 
@@ -35,7 +37,16 @@ function workingDaysFrom(from: string, n: number) {
 }
 
 /** New task (or content deliverable): a side panel on desktop, a bottom sheet on phones. */
-export function NewDeliverableSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function NewDeliverableSheet({
+  open,
+  onOpenChange,
+  preset,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** Fields filled in by whoever opened the panel (a client page, a day on the calendar). */
+  preset?: NewTaskPreset;
+}) {
   const desktop = useMediaQuery("(min-width: 768px)");
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange} direction={desktop ? "right" : "bottom"} repositionInputs={false}>
@@ -50,7 +61,7 @@ export function NewDeliverableSheet({ open, onOpenChange }: { open: boolean; onO
           )}
         >
           {!desktop ? <div className="mx-auto mt-2.5 h-1.5 w-10 shrink-0 rounded-full bg-line-strong" /> : null}
-          {open ? <Form onDone={() => onOpenChange(false)} /> : null}
+          {open ? <Form preset={preset ?? NO_PRESET} onDone={() => onOpenChange(false)} /> : null}
         </Drawer.Content>
       </Drawer.Portal>
     </Drawer.Root>
@@ -70,8 +81,18 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 const control =
   "h-10 w-full rounded-lg border border-line bg-surface px-3 text-[14px] text-ink shadow-sm outline-none placeholder:text-faint focus:border-focus focus:ring-2 focus:ring-focus/20";
 
-function Form({ onDone }: { onDone: () => void }) {
+const NO_PRESET: NewTaskPreset = {};
+
+/** The start of the next working week (Sunday), from today. */
+function nextSunday(today: string) {
+  let d = addDays(today, 1);
+  while (dayOfWeek(d) !== 0) d = addDays(d, 1);
+  return d;
+}
+
+function Form({ preset, onDone }: { preset: NewTaskPreset; onDone: () => void }) {
   const { data, me, role, today, create, save, notify } = useNumu();
+  const titleInput = useRef<HTMLInputElement>(null);
 
   const clients = useMemo(() => {
     const led = ledClientIds(data, me.id, role);
@@ -84,26 +105,31 @@ function Form({ onDone }: { onDone: () => void }) {
 
   // Start from what this person picked last time.
   const [last] = useState(readLast);
-  const [kind, setKind] = useState<Kind>(last.kind === "content" && canPlan(role) ? "content" : "task");
-  const [clientId, setClientId] = useState(
-    clients.some((c) => c.id === last.clientId) ? last.clientId! : (clients[0]?.id ?? ""),
-  );
-  const [projectId, setProjectId] = useState("");
-  const [parentId, setParentId] = useState("");
+  // Opened for a subtask, or by someone who can't plan content: it's a task.
+  const startKind: Kind = last.kind === "content" && canPlan(role) && !preset.parentId ? "content" : "task";
+  const [kind, setKind] = useState<Kind>(startKind);
+  const [clientId, setClientId] = useState(() => {
+    const wanted = preset.clientId ?? last.clientId;
+    return clients.some((c) => c.id === wanted) ? wanted! : (clients[0]?.id ?? "");
+  });
+  const [projectId, setProjectId] = useState(preset.projectId ?? "");
+  const [parentId, setParentId] = useState(preset.parentId ?? "");
   const [type, setType] = useState<DeliverableTypeCode>(() => {
-    const k = last.kind === "content" && canPlan(role) ? "content" : "task";
+    const k = startKind;
     const remembered = k === "task" ? last.taskType : last.contentType;
     const list = k === "task" ? taskTypes : contentTypes;
     return list.some((t) => t.code === remembered) ? remembered! : (list[0]?.code ?? "follow_up");
   });
   const [platform, setPlatform] = useState<Platform | "">("instagram");
   const [title, setTitle] = useState("");
-  const [due, setDue] = useState(workingDaysFrom(today, kind === "task" ? 1 : 3));
+  const [due, setDue] = useState(preset.due ?? workingDaysFrom(today, kind === "task" ? 1 : 3));
   // A task you add is yours unless you give it away; content goes to the client's lead.
   const [ownerId, setOwnerId] = useState(
-    kind === "task" ? me.id : (data.clients.find((c) => c.id === clientId)?.account_lead_id ?? me.id),
+    preset.ownerId ?? (kind === "task" ? me.id : (data.clients.find((c) => c.id === clientId)?.account_lead_id ?? me.id)),
   );
   const [repeat, setRepeat] = useState(false);
+  const [another, setAnother] = useState(false);
+  const [added, setAdded] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -165,16 +191,44 @@ function Form({ onDone }: { onDone: () => void }) {
     });
     if (!result.ok) return setError(result.reason);
     writeLast({ kind, clientId, taskType: isTask ? type : last.taskType, contentType: isTask ? last.contentType : type });
+    if (another) {
+      // Stay open for the next one: same client, type, owner and date.
+      setTitle("");
+      setRepeat(false);
+      setAdded((n) => n + 1);
+      titleInput.current?.focus();
+      return;
+    }
     onDone();
     notify(
       isTask ? (repeat ? `Added. It repeats every month on day ${dayNumber(due)}` : "Task added") : "Deliverable added",
       "success",
-      { label: "Open", href: `/deliverables/${result.id}` },
+      { label: "Open", href: taskHref(result.id) },
     );
   }
 
+  const quick: { label: string; day: string }[] = [
+    { label: "Today", day: today },
+    { label: "Tomorrow", day: addDays(today, 1) },
+    { label: "Sunday", day: nextSunday(today) },
+    { label: "In a week", day: addDays(today, 7) },
+  ];
+
   return (
-    <>
+    <form
+      className="flex min-h-0 flex-1 flex-col"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (clientId && !busy) void submit();
+      }}
+      // ⌘/Ctrl + Enter adds it from any field.
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          e.currentTarget.requestSubmit();
+        }
+      }}
+    >
       <div className="flex items-start justify-between gap-3 border-b border-line px-5 py-4">
         <div>
           <Drawer.Title className="text-[16px] font-semibold">New task</Drawer.Title>
@@ -212,9 +266,11 @@ function Form({ onDone }: { onDone: () => void }) {
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            ref={titleInput}
             placeholder={isTask ? (TITLE_HINT[type] ?? fallbackTitle) : fallbackTitle}
             className={control}
             autoFocus
+            enterKeyHint="done"
           />
         </Field>
         <div className="grid grid-cols-2 gap-3">
@@ -279,10 +335,32 @@ function Form({ onDone }: { onDone: () => void }) {
               </select>
             </Field>
           )}
+          {!isTask ? <OwnerField value={ownerId} onChange={setOwnerId} /> : null}
+        </div>
+        <div>
           <Field label={isTask ? "Due" : "Due for review"}>
             <input type="date" value={due} min={today} onChange={(e) => e.target.value && setDue(e.target.value)} className={control} />
           </Field>
-          {!isTask ? <OwnerField value={ownerId} onChange={setOwnerId} /> : null}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {quick.map((qd) => (
+              <button
+                key={qd.label}
+                type="button"
+                onClick={() => setDue(qd.day)}
+                aria-pressed={due === qd.day}
+                className={cn(
+                  "h-8 rounded-full border px-3 text-[12.5px] transition-colors md:h-7",
+                  due === qd.day ? "border-primary bg-primary font-medium text-primary-ink" : "border-line bg-surface text-ink-2 hover:bg-surface-2",
+                )}
+              >
+                {qd.label}
+              </button>
+            ))}
+          </div>
+          <p className={cn("mt-1.5 text-[12px]", isWorkingDay(due) ? "text-muted" : "text-serious")}>
+            {formatLong(due)}
+            {isWorkingDay(due) ? "" : " · a weekend in Doha"}
+          </p>
         </div>
         {isTask && parents.length ? (
           <Field label="Subtask of" hint={parentId ? "It shows inside that task, and in its owner's My work." : "Optional: make it a step of a bigger task."}>
@@ -328,13 +406,19 @@ function Form({ onDone }: { onDone: () => void }) {
         {error ? <p className="text-[13px] text-critical">{error}</p> : null}
       </div>
 
-      <div className="flex justify-end gap-2 border-t border-line px-5 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
-        <Button onClick={onDone}>Cancel</Button>
-        <Button variant="primary" onClick={() => void submit()} disabled={!clientId || busy}>
+      <div className="flex items-center gap-2 border-t border-line px-5 py-3 pb-[max(12px,env(safe-area-inset-bottom))]">
+        <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 text-[12.5px] text-ink-2">
+          <input type="checkbox" checked={another} onChange={(e) => setAnother(e.target.checked)} className="size-4 accent-[var(--primary)]" />
+          <span className="truncate" aria-live="polite">
+            {added ? `${added} added. Add another` : "Add another after this"}
+          </span>
+        </label>
+        <Button onClick={onDone}>{added ? "Done" : "Cancel"}</Button>
+        <Button variant="primary" type="submit" disabled={!clientId || busy} title="⌘/Ctrl + Enter">
           {isTask ? "Add task" : "Add deliverable"}
         </Button>
       </div>
-    </>
+    </form>
   );
 }
 

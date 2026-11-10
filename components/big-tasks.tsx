@@ -7,6 +7,7 @@ import { firstName } from "@/lib/format";
 import type { BoardRow } from "@/lib/selectors";
 import { isDone } from "@/lib/workflow";
 import { Avatar, Card, CardHeader, Pill } from "./ui";
+import { taskHref } from "@/lib/routes";
 
 /**
  * Overview: every task that has subtasks and isn't finished, with how far
@@ -36,7 +37,7 @@ export function BigTasksCard({ rows, today }: { rows: BoardRow[]; today: string 
           return (
             <li key={r.id}>
               <Link
-                href={`/deliverables/${r.id}`}
+                href={taskHref(r.id)}
                 className="grid gap-x-5 gap-y-2 px-4 py-3.5 hover:bg-surface-2 sm:px-5 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto] md:items-center"
               >
                 <span className="min-w-0">

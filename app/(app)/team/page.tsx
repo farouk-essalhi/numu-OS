@@ -5,7 +5,8 @@ import { ChevronLeft, ChevronRight, Pencil, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { PermissionsPanel } from "@/components/permissions";
 import { TickMeter } from "@/components/charts";
-import { EditSheet, type Edit } from "@/components/entity-forms";
+import type { Edit } from "@/components/entity-forms";
+import { EditSheet } from "@/components/lazy";
 import {
   Avatar,
   Button,
@@ -134,7 +135,7 @@ export default function TeamPage() {
           ) : null}
           <div
             className={cn(
-              "scroll-thin hidden overflow-x-auto",
+              "scroll-thin relative hidden overflow-x-auto",
               cap.length && "md:block",
             )}
           >

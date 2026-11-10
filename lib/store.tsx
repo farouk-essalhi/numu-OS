@@ -2,23 +2,23 @@
 
 // The app's data source. Two backends behind one API:
 //   live  Supabase: load what this person may see (RLS), write as them, then
-//         reload. Card moves and edits show at once (optimistic) and roll back
-//         if the database refuses them.
+//         catch up in the background. Card moves and edits show at once
+//         (optimistic) and roll back if the database refuses them.
 //   demo  fictional data held in this browser, when Supabase isn't configured
 //         (local development, tests). Same rules, applied locally.
+//
+// Speed notes (decisions 50-51):
+//   * The app opens from a copy of the last loaded data kept in this browser
+//     (lib/cache.ts) and refreshes straight away, so there's no wait on the
+//     network to see your work.
+//   * After a change, only the tables that change all day are reloaded, and
+//     only the status history that is new (reloadDataset).
+//   * Messages and the "synced" indicator live outside the main context, so
+//     showing one doesn't redraw every screen.
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-  type Dispatch,
-  type ReactNode,
-  type SetStateAction,
-} from "react";
 import Link from "next/link";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { AvatarTints, avatarTints } from "@/components/ui";
 import {
   deleteRow,
   deleteRows,
@@ -27,22 +27,25 @@ import {
   insertRow,
   loadDataset,
   payloadFor,
+  reloadDataset,
   runGenerator,
   setMyLogin,
   updateRow,
   type EntityKey,
   type EntityRow,
   type Result,
+  type Scope,
 } from "./backend";
+import { clearCache, readCache, writeCache, writeCacheSoon } from "./cache";
 import { qatarHour, qatarToday, monthStart } from "./dates";
 import { buildDemoDataset, DEMO_DEFAULT_USER } from "./demo/data";
 import { generateMonth } from "./generator";
+import { authPasswordError, normalizeUsername } from "./logins";
 import { boardRows, type BoardRow } from "./selectors";
-import { supabase, supabaseConfigured } from "./supabase";
+import { createSignal, useSignal, type Signal } from "./signals";
+import { savedUser, supabase, supabaseConfigured } from "./supabase";
 import type { AccessLevel, Dataset, Deliverable, DeliverableStatus, IsoDate, TeamMember } from "./types";
 import { applyMove, type MoveResult } from "./workflow";
-import { authPasswordError, normalizeUsername } from "./logins";
-import { AvatarTints, avatarTints } from "@/components/ui";
 
 export type { EntityKey, EntityRow, Result } from "./backend";
 
@@ -68,15 +71,32 @@ export type DeliverablePatch = Partial<
   Pick<Deliverable, "title" | "owner_id" | "due_date" | "post_date" | "script_url" | "raw_url" | "final_url" | "post_url" | "sort_order">
 >;
 
+// ---------------------------------------------------------------------------
+// Messages (toasts) and sync state: shared values outside the main context.
+// ---------------------------------------------------------------------------
 export interface Toast {
   id: number;
   text: string;
   tone: "info" | "error" | "success";
-  /** A link or button after the text, e.g. "Open". */
+  /** A link or button after the text, e.g. "Open" or "Undo". */
   action?: ToastAction;
 }
 
 export type ToastAction = { label: string; href: string } | { label: string; run: () => void };
+
+const toastSignal = createSignal<Toast[]>([]);
+let toastSeq = 0;
+
+/** Show a short message at the bottom of the screen. Safe to call from anywhere. */
+export function notify(text: string, tone: Toast["tone"] = "info", action?: ToastAction): void {
+  const id = ++toastSeq;
+  toastSignal.set((t) => [...t.slice(-2), { id, text, tone, action }]);
+  setTimeout(() => dismissToast(id), tone === "error" || action ? 6000 : 3500);
+}
+
+function dismissToast(id: number) {
+  toastSignal.set((t) => (t.some((x) => x.id === id) ? t.filter((x) => x.id !== id) : t));
+}
 
 /** When the data was last loaded from Supabase, and whether a reload is running. */
 export interface SyncState {
@@ -84,6 +104,15 @@ export interface SyncState {
   busy: boolean;
 }
 
+const syncSignal = createSignal<SyncState>({ at: 0, busy: false });
+
+export function useSyncState(): SyncState {
+  return useSignal(syncSignal);
+}
+
+// ---------------------------------------------------------------------------
+// The main context
+// ---------------------------------------------------------------------------
 interface NumuValue {
   data: Dataset;
   rows: BoardRow[];
@@ -111,10 +140,9 @@ interface NumuValue {
   setMyPassword: (password: string) => Promise<Result>;
   /** Partners: make someone choose a new username and password at next sign-in. */
   askToSetUpAgain: (memberId: string) => Promise<Result>;
-  sync: SyncState;
   generate: (month: IsoDate, retainerId?: string | null) => Promise<{ ok: true; created: number } | { ok: false; reason: string }>;
   refresh: () => Promise<void>;
-  notify: (text: string, tone?: Toast["tone"], action?: ToastAction) => void;
+  notify: typeof notify;
   signOut: () => Promise<void>;
   viewAs: (teamMemberId: string) => void;
   /** Demo only: drop the fictional clients and work to try entering your own. */
@@ -128,7 +156,15 @@ const NumuContext = createContext<NumuValue | null>(null);
 // React's use() gets the same promise on every render.
 // ---------------------------------------------------------------------------
 export type LiveBoot =
-  | { kind: "ready"; data: Dataset; meId: string; email: string }
+  | {
+      kind: "ready";
+      data: Dataset;
+      meId: string;
+      userId: string;
+      email: string;
+      /** Set when `data` is the copy saved in this browser (it is refreshed at once). */
+      cachedAt: number | null;
+    }
   | { kind: "signed_out" }
   | { kind: "no_member"; email: string }
   | { kind: "error"; message: string };
@@ -138,19 +174,42 @@ let bootCache: Promise<LiveBoot> | null = null;
 export function liveBoot(): Promise<LiveBoot> {
   bootCache ??= (async (): Promise<LiveBoot> => {
     try {
+      // Fast start: this browser is signed in and has a copy of the data, so
+      // open now. The refresh that follows renews the sign-in if it has run
+      // out; one that is no longer valid ends at /login (app-root, Sync).
+      const peek = savedUser();
+      const fast = peek ? openSaved(peek.id, peek.email) : null;
+      if (fast) return fast;
+
       const sb = supabase();
       const { data: auth } = await sb.auth.getSession();
       const user = auth.session?.user;
-      if (!user) return { kind: "signed_out" };
+      if (!user) {
+        clearCache();
+        return { kind: "signed_out" };
+      }
+      const email = user.email ?? "";
+      const saved = openSaved(user.id, email);
+      if (saved) return saved;
+
       const data = await loadDataset(sb);
       const me = data.team.find((m) => m.user_id === user.id && m.is_active);
-      if (!me) return { kind: "no_member", email: user.email ?? "" };
-      return { kind: "ready", data, meId: me.id, email: user.email ?? me.email ?? "" };
+      if (!me) return { kind: "no_member", email };
+      writeCache(user.id, data);
+      return { kind: "ready", data, meId: me.id, userId: user.id, email, cachedAt: null };
     } catch (e) {
       return { kind: "error", message: e instanceof Error ? e.message : String((e as { message?: string })?.message ?? e) };
     }
   })();
   return bootCache;
+}
+
+/** The saved copy for this login, if it can be opened from. */
+function openSaved(userId: string, email: string): LiveBoot | null {
+  const saved = readCache(userId);
+  // Not while they still have to choose their login: that check needs fresh data.
+  const me = saved?.data.team.find((m) => m.user_id === userId && m.is_active && m.credentials_set_at);
+  return saved && me ? { kind: "ready", data: saved.data, meId: me.id, userId, email, cachedAt: saved.at } : null;
 }
 
 export { supabaseConfigured };
@@ -175,16 +234,24 @@ const EMPTY_DEMO = (d: Dataset): Dataset => ({
   comments: [],
 });
 
+// ---------------------------------------------------------------------------
+// Local copies of what the database does, so a change shows before it answers.
+// ---------------------------------------------------------------------------
+
 /** What deleting a row would break, the way the database's foreign keys refuse it. */
-function demoBlocksDelete(data: Dataset, entity: EntityKey, id: string): string | null {
+function blocksDelete(data: Dataset, entity: EntityKey, id: string): string | null {
   const inUse = "It's still in use (it has deliverables, retainers or projects). Mark it ended or cancelled instead";
-  if (entity === "clients" && (data.retainers.some((r) => r.client_id === id) || data.projects.some((p) => p.client_id === id) || data.deliverables.some((d) => d.client_id === id))) return inUse;
+  if (
+    entity === "clients" &&
+    (data.retainers.some((r) => r.client_id === id) || data.projects.some((p) => p.client_id === id) || data.deliverables.some((d) => d.client_id === id))
+  )
+    return inUse;
   if (entity === "retainers" && data.deliverables.some((d) => d.retainer_id === id)) return inUse;
   if (entity === "projects" && data.deliverables.some((d) => d.project_id === id)) return inUse;
   return null;
 }
 
-function demoDelete(data: Dataset, entity: EntityKey, id: string): Dataset {
+function deleteLocal(data: Dataset, entity: EntityKey, id: string): Dataset {
   const next = { ...data, [entity]: (data[entity] as { id: string }[]).filter((r) => r.id !== id) } as Dataset;
   if (entity === "clients") next.contacts = next.contacts.filter((c) => c.client_id !== id);
   if (entity === "retainers") next.scopeLines = next.scopeLines.filter((s) => s.retainer_id !== id);
@@ -204,64 +271,106 @@ function demoDelete(data: Dataset, entity: EntityKey, id: string): Dataset {
   return next;
 }
 
+function upsertLocal<K extends EntityKey>(data: Dataset, entity: K, row: EntityRow<K>): Dataset {
+  const list = data[entity] as { id: string }[];
+  const next = list.some((r) => r.id === row.id) ? list.map((r) => (r.id === row.id ? row : r)) : [...list, row];
+  return { ...data, [entity]: next } as Dataset;
+}
+
+// History rows the app adds while waiting for the database get negative ids.
+let tempSeq = 0;
+const tempId = () => -(Date.now() * 1000 + (++tempSeq % 1000));
+
+const widest = (a: Scope | null, b: Scope): Scope => (a === "all" || b === "all" ? "all" : "work");
+
 /**
- * Live sync: toasts, reloads and writes. Writes in flight hold back reloads,
- * so a reload never undoes a card move the database hasn't confirmed yet.
- * A plain object (not hooks) so its methods are stable for the whole session.
+ * Live sync: reloads and writes. Writes in flight hold back reloads, so a
+ * reload never undoes a card move the database hasn't confirmed yet. A plain
+ * object (not hooks) so its methods are stable for the whole session.
  */
 class Sync {
   private pending = 0;
+  /** Counts writes, so a reload that overlapped one is thrown away. */
+  private writes = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
-  private toastSeq = 0;
+  private scheduled: Scope | null = null;
+  private running = false;
+  private wanted: Scope | null = null;
   lastLoad = Date.now();
 
   constructor(
-    private live: boolean,
-    private setData: (d: Dataset) => void,
-    private setToasts: Dispatch<SetStateAction<Toast[]>>,
-    private setSync: Dispatch<SetStateAction<SyncState>>,
+    private live: { userId: string; meId: string } | null,
+    /** The data on screen: partial reloads are merged into it. */
+    private store: Signal<Dataset>,
   ) {}
 
-  notify = (text: string, tone: Toast["tone"] = "info", action?: ToastAction) => {
-    const id = ++this.toastSeq;
-    this.setToasts((t) => [...t.slice(-2), { id, text, tone, action }]);
-    setTimeout(() => this.setToasts((t) => t.filter((x) => x.id !== id)), tone === "error" ? 6000 : action ? 5000 : 3500);
-  };
-
-  refresh = async () => {
-    if (!this.live) {
+  refresh = async (scope: Scope = "all"): Promise<void> => {
+    const live = this.live;
+    if (!live) {
       // Demo data lives in this tab: nothing to fetch, but the indicator still answers.
-      this.setSync({ at: Date.now(), busy: false });
+      syncSignal.set({ at: Date.now(), busy: false });
       return;
     }
-    this.setSync((s) => ({ ...s, busy: true }));
+    if (this.running) {
+      // One reload at a time; remember that another was asked for.
+      this.wanted = widest(this.wanted, scope);
+      return;
+    }
+    this.running = true;
+    const writesBefore = this.writes;
+    syncSignal.set((s) => ({ ...s, busy: true }));
     try {
-      const next = await loadDataset(supabase());
+      const next = await reloadDataset(supabase(), this.store.get(), scope);
       this.lastLoad = Date.now();
-      if (this.pending === 0) {
-        this.setData(next);
-        this.setSync({ at: this.lastLoad, busy: false });
+      if (scope === "all" && !next.team.some((m) => m.id === live.meId && m.is_active)) {
+        // No longer on the team: drop the saved copy and let the app say so.
+        clearCache();
+        location.reload();
+        return;
+      }
+      if (this.pending === 0 && this.writes === writesBefore) {
+        this.store.set(next);
+        writeCacheSoon(live.userId, next);
+        syncSignal.set({ at: this.lastLoad, busy: false });
       } else {
-        this.setSync((s) => ({ ...s, busy: false }));
-        this.schedule();
+        // Something changed while this was loading: don't draw over it, ask again.
+        syncSignal.set((s) => ({ ...s, busy: false }));
+        this.schedule(500, scope);
       }
     } catch {
-      this.setSync((s) => ({ ...s, busy: false }));
-      this.notify("Couldn't refresh. Check your connection", "error");
+      syncSignal.set((s) => ({ ...s, busy: false }));
+      if (!savedUser()) {
+        // The sign-in is gone from this browser (signed out in another tab, or it ended).
+        clearCache();
+        location.replace("/login");
+        return;
+      }
+      notify("Couldn't refresh. Check your connection", "error");
+    } finally {
+      this.running = false;
+      if (this.wanted) {
+        const again = this.wanted;
+        this.wanted = null;
+        void this.refresh(again);
+      }
     }
   };
 
-  schedule = (ms = 500) => {
+  schedule = (ms = 500, scope: Scope = "all") => {
+    this.scheduled = widest(this.scheduled, scope);
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = null;
-      if (this.pending > 0) this.schedule(ms);
-      else void this.refresh();
+      if (this.pending > 0) return this.schedule(ms, scope);
+      const what = this.scheduled ?? scope;
+      this.scheduled = null;
+      void this.refresh(what);
     }, ms);
   };
 
   track = async <T,>(fn: () => Promise<T>): Promise<T> => {
     this.pending++;
+    this.writes++;
     try {
       return await fn();
     } finally {
@@ -269,36 +378,61 @@ class Sync {
     }
   };
 
-  write = async (fn: () => Promise<Result>, quiet = false): Promise<Result> => {
+  /** Run a write, say so if it failed, and catch up with the database shortly after. */
+  write = async (fn: () => Promise<Result>, opts: { quiet?: boolean; scope?: Scope } = {}): Promise<Result> => {
     const r = await this.track(fn);
-    if (!r.ok && !quiet) this.notify(r.reason, "error");
-    this.schedule();
+    if (!r.ok && !opts.quiet) notify(r.reason, "error");
+    this.schedule(500, opts.scope ?? "work");
     return r;
   };
 }
 
-export function NumuProvider({ children, live = null }: { children: ReactNode; live?: { data: Dataset; meId: string } | null }) {
+export interface LiveStart {
+  data: Dataset;
+  meId: string;
+  userId: string;
+  cachedAt: number | null;
+}
+
+export function NumuProvider({ children, live = null }: { children: ReactNode; live?: LiveStart | null }) {
   const isLive = live !== null;
   const [now] = useState(() => new Date());
-  const today = qatarToday(now);
-  const [data, setData] = useState<Dataset>(() => live?.data ?? buildDemoDataset(today, now));
+  const [hour] = useState(() => qatarHour());
+  // Today in Doha. Checked every minute so a tab left open overnight rolls over.
+  const [today, setToday] = useState(() => qatarToday(now));
+  useEffect(() => {
+    const t = setInterval(() => setToday(qatarToday()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  // The data lives in one shared value: screens redraw when it changes, and
+  // actions always read the latest (so "Undo" a few seconds later still works).
+  const [store] = useState(() => createSignal<Dataset>(live?.data ?? buildDemoDataset(today, now)));
+  const data = useSignal(store);
+  const setData = store.set;
   const [demoMeId, setDemoMeId] = useState(readViewAs);
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const [syncState, setSyncState] = useState<SyncState>(() => ({ at: now.getTime(), busy: false }));
+
+  const [sync] = useState(() => new Sync(live ? { userId: live.userId, meId: live.meId } : null, store));
+  const { write } = sync;
+
+  // Opened from the saved copy: say how old it is and catch up right away.
+  const cachedAt = live?.cachedAt ?? null;
+  useEffect(() => {
+    syncSignal.set({ at: cachedAt ?? Date.now(), busy: false });
+    if (cachedAt) void sync.refresh("all");
+  }, [sync, cachedAt]);
 
   const meId = live?.meId ?? demoMeId;
   // If a refresh no longer includes me (deactivated), keep my row from sign-in
-  // until the next page load sends me to "no access".
+  // until the reload sends me to "no access".
   const me = (data.team.find((m) => m.id === meId) ??
     (live ? live.data.team.find((m) => m.id === meId) : data.team.find((m) => m.id === DEMO_DEFAULT_USER)) ??
     data.team[0])!;
   const role = me.access_level;
   const rows = useMemo(() => boardRows(data, today, new Date()), [data, today]);
 
-  const [sync] = useState(() => new Sync(isLive, setData, setToasts, setSyncState));
-  const { notify, refresh, write } = sync;
-
-  // Pick up teammates' changes when coming back to the tab.
+  // Pick up teammates' changes when coming back to the tab, and every two
+  // minutes while it's open.
   useEffect(() => {
     if (!isLive) return;
     const onVisible = () => {
@@ -306,7 +440,6 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
     };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
-    // And every two minutes while the tab is open, so teammates' moves show up.
     const every = setInterval(() => {
       if (document.visibilityState === "visible") sync.schedule(0);
     }, 120_000);
@@ -320,25 +453,25 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
   // --- deliverables ---------------------------------------------------------
   const move = useCallback(
     (id: string, to: DeliverableStatus): MoveResult => {
-      const d = data.deliverables.find((x) => x.id === id);
+      const d = store.get().deliverables.find((x) => x.id === id);
       if (!d) return { ok: false, reason: "Not found" };
       const result = applyMove(d, to, { teamMemberId: me.id, perms: me });
       if (result.ok) {
         setData((prev) => ({
           ...prev,
           deliverables: prev.deliverables.map((x) => (x.id === id ? result.deliverable : x)),
-          statusEvents: [...prev.statusEvents, { ...result.event, id: -Date.now() }],
+          statusEvents: [...prev.statusEvents, { ...result.event, id: tempId() }],
         }));
         if (isLive) void write(() => updateRow(supabase(), "deliverables", id, { status: to }));
       }
       return result;
     },
-    [data.deliverables, me, isLive, write],
+    [store, setData, me, isLive, write],
   );
 
   const update = useCallback(
     (id: string, patch: DeliverablePatch) => {
-      const d = data.deliverables.find((x) => x.id === id);
+      const d = store.get().deliverables.find((x) => x.id === id);
       if (!d) return;
       const payload: Record<string, unknown> = { ...patch };
       if (patch.due_date && d.project_id) payload.month = monthStart(patch.due_date);
@@ -348,12 +481,13 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
       }));
       if (isLive) void write(() => updateRow(supabase(), "deliverables", id, payload));
     },
-    [data.deliverables, isLive, write],
+    [store, setData, isLive, write],
   );
 
   const create = useCallback(
     (input: NewDeliverableInput) => {
       if (!me.can_create_tasks) return { ok: false as const, reason: "Adding tasks needs permission (Team → Permissions)" };
+      const data = store.get();
       const type = data.deliverableTypes.find((t) => t.code === input.deliverable_type)!;
       // A subtask belongs wherever its parent does (the database copies it too).
       const parent = input.parent_id ? data.deliverables.find((x) => x.id === input.parent_id) : null;
@@ -407,7 +541,7 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
         statusEvents: [
           ...prev.statusEvents,
           {
-            id: -Date.now(),
+            id: tempId(),
             deliverable_id: id,
             from_status: null,
             to_status: "planned",
@@ -420,7 +554,7 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
       if (isLive) void write(() => insertRow(supabase(), "deliverables", id, payloadFor("deliverables", d)));
       return { ok: true as const, id };
     },
-    [data.retainers, data.deliverableTypes, data.deliverables, me.id, me.can_create_tasks, isLive, write],
+    [store, setData, me.id, me.can_create_tasks, isLive, write],
   );
 
   const comment = useCallback(
@@ -445,77 +579,76 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
       }));
       if (isLive) void write(() => insertComment(supabase(), commentId, id, text));
     },
-    [me.id, isLive, write],
+    [setData, me.id, isLive, write],
   );
 
   // --- clients, contacts, retainers, scope, projects, team -----------------
+  // The form waits for the database's answer (it may refuse: a duplicate name,
+  // a missing permission), then the change shows at once; the full reload
+  // follows in the background instead of holding the form open.
   const save = useCallback(
     async <K extends EntityKey>(entity: K, row: EntityRow<K>): Promise<Result> => {
-      const exists = (data[entity] as { id: string }[]).some((r) => r.id === row.id);
       if (isLive) {
+        const exists = (store.get()[entity] as { id: string }[]).some((r) => r.id === row.id);
         const sb = supabase();
         const payload = payloadFor(entity, row);
-        const r = await write(() => (exists ? updateRow(sb, entity, row.id, payload) : insertRow(sb, entity, row.id, payload)), true);
-        if (r.ok) await refresh();
-        return r;
+        const r = await write(() => (exists ? updateRow(sb, entity, row.id, payload) : insertRow(sb, entity, row.id, payload)), {
+          quiet: true,
+          scope: "all",
+        });
+        if (!r.ok) return r;
       }
-      setData((prev) => {
-        const list = prev[entity] as { id: string }[];
-        const next = exists ? list.map((r) => (r.id === row.id ? row : r)) : [...list, row];
-        return { ...prev, [entity]: next } as Dataset;
-      });
+      setData((prev) => upsertLocal(prev, entity, row));
       return { ok: true };
     },
-    [data, isLive, write, refresh],
+    [store, setData, isLive, write],
   );
 
   const remove = useCallback(
     async (entity: EntityKey, id: string): Promise<Result> => {
       if (isLive) {
-        const r = await write(() => deleteRow(supabase(), entity, id), true);
-        if (r.ok) await refresh();
-        return r;
+        const r = await write(() => deleteRow(supabase(), entity, id), { quiet: true, scope: entity === "deliverables" ? "work" : "all" });
+        if (!r.ok) return r;
+      } else {
+        const blocked = blocksDelete(store.get(), entity, id);
+        if (blocked) return { ok: false, reason: blocked };
       }
-      const blocked = demoBlocksDelete(data, entity, id);
-      if (blocked) return { ok: false, reason: blocked };
-      setData((prev) => demoDelete(prev, entity, id));
+      setData((prev) => deleteLocal(prev, entity, id));
       return { ok: true };
     },
-    [data, isLive, write, refresh],
+    [store, setData, isLive, write],
   );
 
   const removeMany = useCallback(
     async (ids: string[]): Promise<Result> => {
       if (ids.length === 0) return { ok: true };
       if (isLive) {
-        const r = await write(() => deleteRows(supabase(), "deliverables", ids), true);
-        await refresh();
-        return r;
+        const r = await write(() => deleteRows(supabase(), "deliverables", ids), { quiet: true });
+        if (!r.ok) return r; // the reload that follows shows what did go
       }
-      setData((prev) => ids.reduce((d, id) => demoDelete(d, "deliverables", id), prev));
+      setData((prev) => ids.reduce((d, id) => deleteLocal(d, "deliverables", id), prev));
       return { ok: true };
     },
-    [isLive, write, refresh],
+    [setData, isLive, write],
   );
 
   const setMyUsername = useCallback(
     async (username: string): Promise<Result> => {
+      const name = normalizeUsername(username);
       if (isLive) {
-        const r = await setMyLogin(supabase(), username);
-        if (r.ok) await refresh();
-        return r;
+        const r = await sync.track(() => setMyLogin(supabase(), name));
+        if (!r.ok) return r;
+        sync.schedule(0, "all");
+      } else if (store.get().team.some((m) => m.id !== me.id && m.username === name)) {
+        return { ok: false, reason: "That username is taken" };
       }
-      const taken = data.team.some((m) => m.id !== me.id && m.username === normalizeUsername(username));
-      if (taken) return { ok: false, reason: "That username is taken" };
       setData((prev) => ({
         ...prev,
-        team: prev.team.map((m) =>
-          m.id === me.id ? { ...m, username: normalizeUsername(username), credentials_set_at: m.credentials_set_at ?? new Date().toISOString() } : m,
-        ),
+        team: prev.team.map((m) => (m.id === me.id ? { ...m, username: name, credentials_set_at: m.credentials_set_at ?? new Date().toISOString() } : m)),
       }));
       return { ok: true };
     },
-    [isLive, refresh, data.team, me.id],
+    [store, setData, isLive, sync, me.id],
   );
 
   const setMyPassword = useCallback(
@@ -530,14 +663,13 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
   const askToSetUpAgain = useCallback(
     async (memberId: string): Promise<Result> => {
       if (isLive) {
-        const r = await write(() => updateRow(supabase(), "team", memberId, { credentials_set_at: null }), true);
-        if (r.ok) await refresh();
-        return r;
+        const r = await write(() => updateRow(supabase(), "team", memberId, { credentials_set_at: null }), { quiet: true, scope: "all" });
+        if (!r.ok) return r;
       }
       setData((prev) => ({ ...prev, team: prev.team.map((m) => (m.id === memberId ? { ...m, credentials_set_at: null } : m)) }));
       return { ok: true };
     },
-    [isLive, write, refresh],
+    [setData, isLive, write],
   );
 
   const generate = useCallback(
@@ -545,23 +677,26 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
       if (role === "creator") return { ok: false as const, reason: "Partners and account leads generate deliverables" };
       if (isLive) {
         const r = await sync.track(() => runGenerator(supabase(), monthStart(month), retainerId));
-        await refresh();
+        await sync.refresh("work");
         return r;
       }
-      const out = generateMonth(data, month, { retainerId });
+      const out = generateMonth(store.get(), month, { retainerId });
       setData((prev) => ({
         ...prev,
         deliverables: [...prev.deliverables, ...out.deliverables],
-        statusEvents: [...prev.statusEvents, ...out.events.map((e, i) => ({ ...e, id: -Date.now() - i }))],
+        statusEvents: [...prev.statusEvents, ...out.events.map((e) => ({ ...e, id: tempId() }))],
       }));
       return { ok: true as const, created: out.deliverables.length };
     },
-    [data, role, isLive, refresh, sync],
+    [store, setData, role, isLive, sync],
   );
+
+  const refresh = useCallback(() => sync.refresh("all"), [sync]);
 
   const signOut = useCallback(async () => {
     if (!isLive) return;
     await supabase().auth.signOut();
+    clearCache();
     // A full load, so nothing from this session stays in memory.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign("/login");
@@ -578,51 +713,79 @@ export function NumuProvider({ children, live = null }: { children: ReactNode; l
 
   const clearDemo = useCallback(() => {
     if (!isLive) setData((prev) => EMPTY_DEMO(prev));
-  }, [isLive]);
+  }, [setData, isLive]);
 
   const tints = useMemo(() => avatarTints(data.team.map((m) => m.full_name)), [data.team]);
 
-  const value: NumuValue = {
-    data,
-    rows,
-    me,
-    role,
-    today,
-    thisMonth: monthStart(today),
-    now,
-    hour: qatarHour(),
-    isDemo: !isLive,
-    signedIn: isLive,
-    move,
-    update,
-    create,
-    comment,
-    save,
-    remove,
-    removeMany,
-    setMyUsername,
-    setMyPassword,
-    askToSetUpAgain,
-    sync: syncState,
-    generate,
-    refresh,
-    notify,
-    signOut,
-    viewAs,
-    clearDemo,
-  };
+  // One object that only changes when something a screen shows has changed.
+  const value = useMemo<NumuValue>(
+    () => ({
+      data,
+      rows,
+      me,
+      role,
+      today,
+      thisMonth: monthStart(today),
+      now,
+      hour,
+      isDemo: !isLive,
+      signedIn: isLive,
+      move,
+      update,
+      create,
+      comment,
+      save,
+      remove,
+      removeMany,
+      setMyUsername,
+      setMyPassword,
+      askToSetUpAgain,
+      generate,
+      refresh,
+      notify,
+      signOut,
+      viewAs,
+      clearDemo,
+    }),
+    [
+      data,
+      rows,
+      me,
+      role,
+      today,
+      now,
+      hour,
+      isLive,
+      move,
+      update,
+      create,
+      comment,
+      save,
+      remove,
+      removeMany,
+      setMyUsername,
+      setMyPassword,
+      askToSetUpAgain,
+      generate,
+      refresh,
+      signOut,
+      viewAs,
+      clearDemo,
+    ],
+  );
 
   return (
     <NumuContext value={value}>
       <AvatarTints value={tints}>
         {children}
-        <Toaster toasts={toasts} onDismiss={(id) => setToasts((t) => t.filter((x) => x.id !== id))} />
+        <Toaster />
       </AvatarTints>
     </NumuContext>
   );
 }
 
-function Toaster({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: number) => void }) {
+function Toaster() {
+  const toasts = useSignal(toastSignal);
   return (
     <div
       aria-live="polite"
@@ -634,7 +797,7 @@ function Toaster({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: numbe
           className="toast-in pointer-events-auto flex max-w-[480px] items-center gap-1 rounded-xl border border-line bg-surface py-1 pr-1 pl-4 text-[13px] text-ink shadow-lg"
           role={t.tone === "error" ? "alert" : "status"}
         >
-          <button type="button" onClick={() => onDismiss(t.id)} className="flex min-h-9 items-center gap-2.5 py-1.5 pr-2 text-left">
+          <button type="button" onClick={() => dismissToast(t.id)} className="flex min-h-9 items-center gap-2.5 py-1.5 pr-2 text-left">
             <span
               aria-hidden
               className="size-2 shrink-0 rounded-full"
@@ -646,7 +809,7 @@ function Toaster({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: numbe
             "href" in t.action ? (
               <Link
                 href={t.action.href}
-                onClick={() => onDismiss(t.id)}
+                onClick={() => dismissToast(t.id)}
                 className="shrink-0 rounded-lg px-2.5 py-1.5 font-medium text-ink underline-offset-2 hover:bg-surface-3"
               >
                 {t.action.label}
@@ -656,7 +819,7 @@ function Toaster({ toasts, onDismiss }: { toasts: Toast[]; onDismiss: (id: numbe
                 type="button"
                 onClick={() => {
                   if ("run" in t.action!) t.action.run();
-                  onDismiss(t.id);
+                  dismissToast(t.id);
                 }}
                 className="shrink-0 rounded-lg px-2.5 py-1.5 font-medium text-ink hover:bg-surface-3"
               >

@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Search } from "lucide-react";
 import { useMemo, useState } from "react";
-import { EditSheet, type Edit } from "@/components/entity-forms";
+import type { Edit } from "@/components/entity-forms";
+import { EditSheet } from "@/components/lazy";
 import { Avatar, Button, Card, Empty, PageHeader, Pill, Progress, TONE_ICON } from "@/components/ui";
 import { formatMonth, formatRelative } from "@/lib/dates";
 import { firstName, formatMoney, percent } from "@/lib/format";
 import { clientSummaries, HEALTH_META, type Health } from "@/lib/insights";
 import { useNumu } from "@/lib/store";
+import { clientHref } from "@/lib/routes";
 
 export default function ClientsPage() {
   const { rows, data, role, today, thisMonth } = useNumu();
@@ -75,7 +77,7 @@ export default function ClientsPage() {
           </Empty>
         ) : null}
         {list.length === 0 && all.length > 0 ? <Empty>No client matches “{q}”.</Empty> : null}
-        <div className={all.length ? "scroll-thin hidden overflow-x-auto md:block" : "hidden"}>
+        <div className={all.length ? "scroll-thin relative hidden overflow-x-auto md:block" : "hidden"}>
           <table className="w-full min-w-[820px] text-[13px]">
             <thead className="border-b border-line bg-surface-2 text-left text-[12px] text-muted">
               <tr>
@@ -91,12 +93,12 @@ export default function ClientsPage() {
             </thead>
             <tbody className="divide-y divide-line">
               {list.map((c) => (
-                <tr key={c.client.id} onClick={() => router.push(`/clients/${c.client.id}`)} className="cursor-pointer hover:bg-surface-2">
+                <tr key={c.client.id} onClick={() => router.push(clientHref(c.client.id))} className="cursor-pointer hover:bg-surface-2">
                   <td className="py-3 pr-3 pl-5">
                     <span className="flex items-center gap-3">
                       <Avatar name={c.client.name_en} size={32} square />
                       <span className="min-w-0">
-                        <Link href={`/clients/${c.client.id}`} onClick={(e) => e.stopPropagation()} className="block truncate font-medium hover:underline">
+                        <Link href={clientHref(c.client.id)} onClick={(e) => e.stopPropagation()} className="block truncate font-medium hover:underline">
                           {c.client.name_en}
                           {c.client.status !== "active" ? <span className="ml-2 text-[11.5px] font-normal text-muted capitalize">{c.client.status}</span> : null}
                         </Link>
@@ -142,7 +144,7 @@ export default function ClientsPage() {
         <ul className="divide-y divide-line md:hidden">
           {list.map((c) => (
             <li key={c.client.id}>
-              <Link href={`/clients/${c.client.id}`} className="block px-4 py-3.5">
+              <Link href={clientHref(c.client.id)} className="block px-4 py-3.5">
                 <div className="flex items-center gap-3">
                   <Avatar name={c.client.name_en} size={36} square />
                   <div className="min-w-0 flex-1">

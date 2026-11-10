@@ -5,10 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node scripts/web/serve-out.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "preview": "node scripts/web/serve-out.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

@@ -1,12 +1,64 @@
-# Netlify builds the app itself; the Next.js runtime (@netlify/plugin-nextjs)
-# is added automatically and turns server features into Netlify Functions.
+# NUMU OS is a static site (decision 50): `next build` writes plain files to
+# `out/`, Netlify serves them from its CDN edge, and the browser talks to
+# Supabase directly. No server functions, so nothing to wait on or to warm up.
 [build]
   command = "npm run build"
-  publish = ".next"
+  publish = "out"
 
 [build.environment]
   NODE_VERSION = "22"
+  # Plain static hosting: don't add Netlify's Next.js runtime (it exists to
+  # run server features, and this app has none).
+  NETLIFY_NEXT_PLUGIN_SKIP = "true"
 
-# Declared explicitly so it always runs (not version-pinned; Netlify keeps it current).
-[[plugins]]
-  package = "@netlify/plugin-nextjs"
+# Build files have a hash in their name, so browsers can keep them for good.
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# Old addresses. Task and client pages used to be /deliverables/<id> and
+# /clients/<id>; links shared before 10 Nov 2026 still work. (A redirect only
+# applies when no file exists at the address, so the app's own files under
+# /deliverables/ and /clients/ are unaffected.)
+[[redirects]]
+  from = "/deliverables/:id"
+  to = "/task?id=:id"
+  status = 302
+
+[[redirects]]
+  from = "/clients/:id"
+  to = "/client?id=:id"
+  status = 302
+
+[[redirects]]
+  from = "/d/:id"
+  to = "/task?id=:id"
+  status = 302
+
+[[redirects]]
+  from = "/board"
+  to = "/deliverables"
+  status = 302
+
+[[redirects]]
+  from = "/pulse"
+  to = "/reports"
+  status = 302
+
+[[redirects]]
+  from = "/schedule"
+  to = "/calendar"
+  status = 302
+
+[[redirects]]
+  from = "/profile"
+  to = "/settings"
+  status = 302

@@ -58,19 +58,21 @@ export function StackedColumns({
 }: {
   data: { key: string; label: string; tooltipTitle: string; values: Record<string, number> }[];
   series: Series[];
-  height?: number;
+  /** Pixels, or "fill" to take the height of the card it sits in. */
+  height?: number | "fill";
   marker?: string;
   title: string;
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const fill = height === "fill";
   const totals = data.map((d) => series.reduce((n, s) => n + (d.values[s.key] ?? 0), 0));
   const max = niceMax(Math.max(1, ...totals));
   const ticks = [0, max / 2, max];
   const every = data.length > 16 ? 3 : data.length > 8 ? 2 : 1;
 
   return (
-    <div className="relative">
-      <div className="flex" style={{ height }}>
+    <div className={cn("relative", fill && "flex min-h-[240px] flex-1 flex-col")}>
+      <div className={cn("flex", fill && "min-h-0 flex-1")} style={fill ? undefined : { height }}>
         <div className="relative mr-2 w-6 shrink-0 text-right text-[11px] text-muted num">
           {ticks.map((t) => (
             <span key={t} className="absolute right-0 -translate-y-1/2" style={{ top: `${100 - (t / max) * 100}%` }}>

@@ -1,20 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, ArrowUp, Check, ChevronDown, ChevronRight, ExternalLink, Link2, Pencil, RotateCcw, Trash2, UserRound } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { FlagPills, StatusStepper } from "@/components/deliverables";
 import { Avatar, Button, Card, CardHeader, Empty, Pill, StatusPill } from "@/components/ui";
 import { formatMonth, formatShort, qatarDate, timeAgo } from "@/lib/dates";
 import { cn, firstName, PLATFORM_LABEL } from "@/lib/format";
-import { useNumu, type DeliverablePatch } from "@/lib/store";
+import { useNumu, useSyncState, type DeliverablePatch } from "@/lib/store";
 import type { DeliverableStatus } from "@/lib/types";
 import { canMove, isDone, nextStatus, STATUSES, STATUS_META } from "@/lib/workflow";
 import { SubtasksCard } from "@/components/subtasks";
+import { clientHref, taskHref } from "@/lib/routes";
 
 export default function DeliverablePage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useSearchParams().get("id") ?? "";
   const { rows, data, me, role, today, now, move, update, comment } = useNumu();
   const row = rows.find((r) => r.id === id);
   const [error, setError] = useState<string | null>(null);
@@ -31,8 +32,17 @@ export default function DeliverablePage() {
     [data.comments, id],
   );
   const team = new Map(data.team.map((m) => [m.id, m]));
+  const syncing = useSyncState().busy;
 
   if (!row) {
+    // Opened from a link while the latest data is still arriving: it may be on its way.
+    if (syncing) {
+      return (
+        <Card>
+          <Empty>Loading this task…</Empty>
+        </Card>
+      );
+    }
     return (
       <Card>
         <Empty>
@@ -76,13 +86,13 @@ export default function DeliverablePage() {
           Tasks
         </Link>
         <ChevronRight className="size-3.5" />
-        <Link href={`/clients/${row.client_id}`} className="truncate hover:text-ink">
+        <Link href={clientHref(row.client_id)} className="truncate hover:text-ink">
           {row.client.name_en}
         </Link>
         {row.parent ? (
           <>
             <ChevronRight className="size-3.5" />
-            <Link href={`/deliverables/${row.parent.id}`} className="truncate hover:text-ink">
+            <Link href={taskHref(row.parent.id)} className="truncate hover:text-ink">
               {row.parent.title}
             </Link>
           </>
@@ -99,7 +109,7 @@ export default function DeliverablePage() {
             {row.platform ? <Pill>{PLATFORM_LABEL[row.platform]}</Pill> : null}
             {row.parent ? (
               <Link
-                href={`/deliverables/${row.parent.id}`}
+                href={taskHref(row.parent.id)}
                 className="inline-flex h-6 items-center gap-1 rounded-md border border-line bg-surface px-2 text-[12px] font-medium text-ink-2 hover:border-line-strong"
               >
                 ↳ Subtask of {row.parent.title}
@@ -112,7 +122,7 @@ export default function DeliverablePage() {
           </div>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-{isTask ? null : (
+          {isTask ? null : (
           <label className="relative">
             <span className="sr-only">Move to</span>
             <select
@@ -280,7 +290,7 @@ export default function DeliverablePage() {
                 </span>
               </Prop>
               <Prop label="Client">
-                <Link href={`/clients/${row.client_id}`} className="font-medium hover:underline">
+                <Link href={clientHref(row.client_id)} className="font-medium hover:underline">
                   {row.client.name_en}
                 </Link>
               </Prop>
@@ -514,7 +524,7 @@ function CopyLink({ id }: { id: string }) {
   return (
     <Button
       onClick={async () => {
-        const url = `${location.origin}/deliverables/${id}`;
+        const url = `${location.origin}${taskHref(id)}`;
         try {
           await navigator.clipboard.writeText(url);
           notify("Link copied. Paste it in WhatsApp", "success");

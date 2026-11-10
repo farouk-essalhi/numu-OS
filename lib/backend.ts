@@ -66,34 +66,51 @@ async function all<T>(page: (from: number, to: number) => Page<T>): Promise<T[]>
 
 const cols = (k: EntityKey, extra = "id") => [extra, ...ENTITIES[k].columns].join(",");
 
+/** How much to reload: everything, or just the work that changes all day. */
+export type Scope = "all" | "work";
+
+// One query per table. Kept as small functions so a reload can pick the
+// tables it needs.
+const q = {
+  deliverableTypes: (sb: Supabase) => all((a, b) => sb.from("deliverable_types").select("*").order("sort_order").range(a, b)),
+  team: (sb: Supabase) =>
+    all((a, b) => sb.from("team_members").select(cols("team", "id,user_id,username,credentials_set_at")).order("full_name").range(a, b)),
+  clients: (sb: Supabase) => all((a, b) => sb.from("clients").select(cols("clients")).order("name_en").range(a, b)),
+  contacts: (sb: Supabase) => all((a, b) => sb.from("contacts").select(cols("contacts")).order("full_name").range(a, b)),
+  retainers: (sb: Supabase) => all((a, b) => sb.from("retainers").select(cols("retainers")).order("start_date").range(a, b)),
+  scopeLines: (sb: Supabase) => all((a, b) => sb.from("scope_lines").select(cols("scopeLines")).order("created_at").range(a, b)),
+  projects: (sb: Supabase) => all((a, b) => sb.from("projects").select(cols("projects")).order("created_at").range(a, b)),
+  deliverables: (sb: Supabase) =>
+    all((a, b) =>
+      sb.from("deliverables").select(cols("deliverables", "id,status,revision_count,posted_at,created_at")).order("id").range(a, b),
+    ),
+  /** Status history is append-only, so after the first load only newer rows are fetched. */
+  statusEvents: (sb: Supabase, afterId = 0) =>
+    all((a, b) => sb.from("status_events").select("*").gt("id", afterId).order("id").range(a, b)),
+  comments: (sb: Supabase) =>
+    all((a, b) =>
+      sb
+        .from("comments")
+        .select("id,deliverable_id,author_team_member_id,author_contact_id,body,is_internal,created_at")
+        .order("created_at")
+        .range(a, b),
+    ),
+};
+
 /** Load everything this person may see, in parallel. */
 export async function loadDataset(sb: Supabase): Promise<Dataset> {
   const [deliverableTypes, team, clients, contacts, retainers, scopeLines, projects, deliverables, statusEvents, comments] =
     await Promise.all([
-      all((a, b) => sb.from("deliverable_types").select("*").order("sort_order").range(a, b)),
-      all((a, b) =>
-        sb.from("team_members").select(cols("team", "id,user_id,username,credentials_set_at")).order("full_name").range(a, b),
-      ),
-      all((a, b) => sb.from("clients").select(cols("clients")).order("name_en").range(a, b)),
-      all((a, b) => sb.from("contacts").select(cols("contacts")).order("full_name").range(a, b)),
-      all((a, b) => sb.from("retainers").select(cols("retainers")).order("start_date").range(a, b)),
-      all((a, b) => sb.from("scope_lines").select(cols("scopeLines")).order("created_at").range(a, b)),
-      all((a, b) => sb.from("projects").select(cols("projects")).order("created_at").range(a, b)),
-      all((a, b) =>
-        sb
-          .from("deliverables")
-          .select(cols("deliverables", "id,status,revision_count,posted_at,created_at"))
-          .order("id")
-          .range(a, b),
-      ),
-      all((a, b) => sb.from("status_events").select("*").order("id").range(a, b)),
-      all((a, b) =>
-        sb
-          .from("comments")
-          .select("id,deliverable_id,author_team_member_id,author_contact_id,body,is_internal,created_at")
-          .order("created_at")
-          .range(a, b),
-      ),
+      q.deliverableTypes(sb),
+      q.team(sb),
+      q.clients(sb),
+      q.contacts(sb),
+      q.retainers(sb),
+      q.scopeLines(sb),
+      q.projects(sb),
+      q.deliverables(sb),
+      q.statusEvents(sb),
+      q.comments(sb),
     ]);
 
   // The database returns plain strings where the app has narrower unions
@@ -110,6 +127,46 @@ export async function loadDataset(sb: Supabase): Promise<Dataset> {
     statusEvents,
     comments,
   } as unknown as Dataset;
+}
+
+/**
+ * Bring a loaded dataset up to date with fewer, smaller requests:
+ *   "work"  deliverables, comments and new status history (after a card move
+ *           or an edit): 3 requests instead of 10;
+ *   "all"   every table, but still only the status history that is new.
+ * Status history can't be edited (the database only ever appends to it, and
+ * drops it with its deliverable), which is what makes "only what's new" safe.
+ */
+export async function reloadDataset(sb: Supabase, prev: Dataset, scope: Scope): Promise<Dataset> {
+  // Rows the app added itself while waiting for the database have negative ids.
+  const known = prev.statusEvents.filter((e) => e.id > 0);
+  const lastId = known.length ? known[known.length - 1].id : 0;
+
+  const [deliverables, comments, newEvents, rest] = await Promise.all([
+    q.deliverables(sb),
+    q.comments(sb),
+    q.statusEvents(sb, lastId),
+    scope === "all"
+      ? Promise.all([q.deliverableTypes(sb), q.team(sb), q.clients(sb), q.contacts(sb), q.retainers(sb), q.scopeLines(sb), q.projects(sb)])
+      : null,
+  ]);
+
+  const alive = new Set((deliverables as unknown as { id: string }[]).map((d) => d.id));
+  const statusEvents = [...known, ...(newEvents as unknown as Dataset["statusEvents"])].filter((e) => alive.has(e.deliverable_id));
+
+  const base = rest
+    ? ({
+        deliverableTypes: rest[0],
+        team: rest[1],
+        clients: rest[2],
+        contacts: rest[3],
+        retainers: rest[4],
+        scopeLines: rest[5],
+        projects: rest[6],
+      } as unknown as Pick<Dataset, "deliverableTypes" | "team" | "clients" | "contacts" | "retainers" | "scopeLines" | "projects">)
+    : prev;
+
+  return { ...prev, ...base, deliverables, comments, statusEvents } as unknown as Dataset;
 }
 
 /** Only the columns the app writes, from a full row. */

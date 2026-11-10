@@ -1,14 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Send } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Avatar, Button, Card, CardHeader, Empty, IconButton, PageHeader, Segmented, StatusPill } from "@/components/ui";
 import { addDays, addMonths, dayNumber, formatLong, formatMonth, isWorkingDay, monthEnd, monthStart, weekStart } from "@/lib/dates";
 import { cn } from "@/lib/format";
+import { useStored } from "@/lib/hooks";
+import { openNewTask } from "@/lib/new-task";
 import { dayPlan, planningWeek, type BoardRow } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import { STATUS_META } from "@/lib/workflow";
+import { taskHref } from "@/lib/routes";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -17,7 +20,7 @@ export default function CalendarPage() {
   const start = isWorkingDay(today) ? today : planningWeek(today).days[0];
   const [selected, setSelected] = useState(start);
   const [month, setMonth] = useState(monthStart(start));
-  const [scope, setScope] = useState<"all" | "mine">("all");
+  const [scope, setScope] = useStored<"all" | "mine">("numu.calendar.scope", "all", "local");
 
   const scoped = useMemo(() => (scope === "mine" ? rows.filter((r) => r.owner_id === me.id) : rows), [rows, scope, me.id]);
   const days = useMemo(() => {
@@ -33,7 +36,7 @@ export default function CalendarPage() {
     <>
       <PageHeader
         title="Calendar"
-        subtitle="Due for client review, and planned go-live dates"
+        subtitle="What's due each day, and when content goes live"
         actions={
           <>
             <Segmented
@@ -124,7 +127,7 @@ export default function CalendarPage() {
           </div>
           <div className="flex flex-wrap items-center gap-4 border-t border-line px-4 py-2.5 text-[12px] text-muted">
             <span className="inline-flex items-center gap-1.5">
-              <span className="size-2 rounded-full bg-[var(--series-1)]" /> Due for review (dot = status)
+              <span className="size-2 rounded-full bg-[var(--series-1)]" /> Due (the dot shows its status)
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Send className="size-3" /> Goes live
@@ -134,9 +137,25 @@ export default function CalendarPage() {
         </Card>
 
         <Card>
-          <CardHeader title={formatLong(selected)} subtitle={isWorkingDay(selected) ? undefined : "Weekend"} />
+          <CardHeader
+            title={formatLong(selected)}
+            subtitle={
+              selected === today
+                ? "Today"
+                : isWorkingDay(selected)
+                  ? `${plan.due.length} due${plan.live.length ? ` · ${plan.live.length} going live` : ""}`
+                  : "Weekend"
+            }
+            action={
+              me.can_create_tasks && selected >= today ? (
+                <Button size="sm" onClick={() => openNewTask({ due: selected })} title={`New task due ${formatLong(selected)}`}>
+                  <Plus /> Add
+                </Button>
+              ) : null
+            }
+          />
           <div className="border-t border-line">
-            <DayGroup title="Due for client review" rows={plan.due} />
+            <DayGroup title="Due" rows={plan.due} />
             <DayGroup title="Going live" rows={plan.live} />
             {plan.due.length === 0 && plan.live.length === 0 ? <Empty>Nothing due or going live.</Empty> : null}
           </div>
@@ -154,7 +173,7 @@ function DayGroup({ title, rows }: { title: string; rows: BoardRow[] }) {
       <ul>
         {rows.map((r) => (
           <li key={r.id}>
-            <Link href={`/deliverables/${r.id}`} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2 sm:px-5">
+            <Link href={taskHref(r.id)} className="flex items-center gap-3 px-4 py-2.5 hover:bg-surface-2 sm:px-5">
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[13px] font-medium">{r.title}</span>
                 <span className="block truncate text-[12px] text-muted">{r.client.name_en}</span>

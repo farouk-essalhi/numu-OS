@@ -3,7 +3,7 @@
 import { RefreshCw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/format";
-import { useNumu } from "@/lib/store";
+import { useNumu, useSyncState } from "@/lib/store";
 
 /** A clock that ticks every `ms`, for "2 min ago" labels. */
 function useTick(ms: number): number {
@@ -25,7 +25,8 @@ function ago(at: number, now: number): string {
 
 /** "Synced just now" + refresh, in the top bar. */
 export function SyncButton() {
-  const { sync, refresh, isDemo } = useNumu();
+  const { refresh, isDemo } = useNumu();
+  const sync = useSyncState();
   const now = useTick(30_000);
   const label = `${isDemo ? "Refreshed" : "Synced"} ${ago(sync.at, Math.max(now, sync.at))}`;
   return (

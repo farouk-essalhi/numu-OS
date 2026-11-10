@@ -1,17 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, PenLine } from "lucide-react";
-import { useMemo, useState } from "react";
+import { ArrowRight, PenLine, Plus } from "lucide-react";
+import { useMemo } from "react";
 import { TickMeter } from "@/components/charts";
-import { DeliverableTable } from "@/components/deliverables";
-import { Card, PageHeader, Tabs } from "@/components/ui";
+import { DeliverableTable, type RowGroup } from "@/components/deliverables";
+import { Button, Card, Empty, PageHeader } from "@/components/ui";
 import { formatMonth } from "@/lib/dates";
+import { openNewTask } from "@/lib/new-task";
 import { myWork, countsForCapacity } from "@/lib/selectors";
 import { useNumu } from "@/lib/store";
 import { isDone } from "@/lib/workflow";
-
-type Tab = "overdue" | "week" | "later" | "done";
 
 export default function MyWorkPage() {
   const { rows, data, me, role, today, thisMonth } = useNumu();
@@ -20,17 +19,33 @@ export default function MyWorkPage() {
     () => rows.filter((r) => r.owner_id === me.id && r.month === thisMonth && isDone(r.status)),
     [rows, me.id, thisMonth],
   );
-  // Open on the first tab with something in it.
-  const [tab, setTab] = useState<Tab>(work.overdue.length ? "overdue" : work.thisWeek.length || !work.later.length ? "week" : "later");
   const points = [...work.overdue, ...work.thisWeek].filter(countsForCapacity).reduce((n, r) => n + r.effort_points, 0);
 
-  const list = { overdue: work.overdue, week: work.thisWeek, later: work.later, done }[tab];
+  // One list, top to bottom in the order to do it: late, today, the week, later.
+  const dueToday = work.thisWeek.filter((r) => r.due_date <= today);
+  const restOfWeek = work.thisWeek.filter((r) => r.due_date > today);
+  const groups: RowGroup[] = [
+    { key: "late", title: "Late", rows: work.overdue, tone: "critical" },
+    { key: "today", title: "Today", rows: dueToday },
+    { key: "week", title: work.weekLabel === "This week" && dueToday.length ? "Rest of this week" : work.weekLabel, rows: restOfWeek },
+    { key: "later", title: "Later", rows: work.later },
+    { key: "done", title: `Done in ${formatMonth(thisMonth).split(" ")[0]}`, rows: done, collapsed: true },
+  ];
+  const nothingOpen = work.open.length === 0;
+
+  const summary = [
+    work.overdue.length ? `${work.overdue.length} late` : null,
+    dueToday.length ? `${dueToday.length} due today` : null,
+    `${work.open.length} open`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <>
       <PageHeader
         title="My work"
-        subtitle={`Everything you own · ${work.open.length} open`}
+        subtitle={nothingOpen ? "Everything you own" : summary}
         actions={
           <div className="w-full min-w-[240px] rounded-xl border border-line bg-surface px-4 py-3 shadow-sm sm:w-auto">
             <div className="mb-2 flex items-center justify-between gap-6 text-[12.5px]">
@@ -60,25 +75,23 @@ export default function MyWorkPage() {
         </Link>
       ) : null}
 
-      <Card>
-        <Tabs
-          className="px-2 sm:px-3"
-          value={tab}
-          onChange={setTab}
-          tabs={[
-            { value: "overdue", label: "Late", count: work.overdue.length },
-            { value: "week", label: work.weekLabel, count: work.thisWeek.length },
-            { value: "later", label: "Later", count: work.later.length },
-            { value: "done", label: `Done in ${formatMonth(thisMonth).split(" ")[0]}`, count: done.length },
-          ]}
-        />
-        <DeliverableTable
-          rows={list}
-          today={today}
-          showOwner={false}
-          quickMove={tab !== "done"}
-          empty={tab === "overdue" ? "Nothing late. Nice." : tab === "done" ? "Nothing approved yet this month." : "Nothing here."}
-        />
+      <Card className="overflow-hidden">
+        {nothingOpen ? (
+          <Empty className="py-12">
+            <span className="block text-[15px] font-medium text-ink">You&apos;re all caught up</span>
+            <span className="mt-1 block">Nothing late, nothing waiting. New work shows up here as soon as it&apos;s yours.</span>
+            {me.can_create_tasks ? (
+              <Button variant="primary" className="mt-4" onClick={() => openNewTask({ ownerId: me.id })}>
+                <Plus /> New task
+              </Button>
+            ) : null}
+          </Empty>
+        ) : null}
+        {nothingOpen && done.length === 0 ? null : (
+          <div className={nothingOpen ? "border-t border-line" : undefined}>
+            <DeliverableTable groups={nothingOpen ? groups.filter((g) => g.key === "done") : groups} today={today} showOwner={false} quickMove />
+          </div>
+        )}
       </Card>
     </>
   );

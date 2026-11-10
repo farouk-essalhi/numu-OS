@@ -5,10 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CheckSquare, ChevronLeft, ChevronRight, Columns3, List, ListTree, LoaderCircle, Search, Trash2, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { KanbanBoard, type BoardColumn, type DropCheck } from "@/components/board";
-import { DeliverableTable, type Selection } from "@/components/deliverables";
-import { Button, ButtonLink, Card, Empty, IconButton, PageHeader, Segmented, SelectFilter } from "@/components/ui";
+import { DeliverableTable, useMove, type RowGroup, type Selection } from "@/components/deliverables";
+import { Button, ButtonLink, Card, Empty, IconButton, Kbd, PageHeader, Segmented, SelectFilter } from "@/components/ui";
 import { addMonths, formatMonth, monthStart } from "@/lib/dates";
-import { useMediaQuery } from "@/lib/hooks";
+import { firstName } from "@/lib/format";
+import { useMediaQuery, useStored } from "@/lib/hooks";
+import { openNewTask } from "@/lib/new-task";
 import { planningWeek } from "@/lib/selectors";
 import { canPlan, useNumu } from "@/lib/store";
 import type { DeliverableStatus } from "@/lib/types";
@@ -18,36 +20,55 @@ import { canMove, isDone, isWithTeam, STATUSES, STATUS_META } from "@/lib/workfl
 type View = "board" | "list";
 type Group = "status" | "client" | "person";
 
+interface Filters {
+  q: string;
+  client: string;
+  owner: string;
+  type: string;
+  status: string;
+  month: string;
+  /** The month the filters were saved in: a new month starts clean. */
+  planned: string;
+}
+const NO_FILTERS: Filters = { q: "", client: "", owner: "", type: "", status: "", month: "", planned: "" };
+
 export default function DeliverablesPage() {
-  const { rows, data, me, role, today, move, update, removeMany, notify } = useNumu();
+  const { rows, data, me, role, today, update, removeMany, notify } = useNumu();
+  const moveIt = useMove();
   const params = useSearchParams();
   const router = useRouter();
   const desktop = useMediaQuery("(min-width: 768px)");
   const planningMonth = monthStart(planningWeek(today).days[0]);
 
-  const [view, setView] = useState<View>(desktop ? "board" : "list");
-  const [group, setGroup] = useState<Group>("status");
-  const [month, setMonth] = useState(planningMonth);
-  const [q, setQ] = useState(params.get("q") ?? "");
-  const [client, setClient] = useState(params.get("client") ?? "");
-  const [owner, setOwner] = useState(params.get("owner") === "me" ? me.id : params.get("owner") ?? "");
-  const [type, setType] = useState("");
-  const [status, setStatus] = useState(params.get("status") ?? "");
-  const [showSubtasks, setShowSubtasks] = useState(() => {
-    try {
-      return localStorage.getItem("numu.tasks.subtasks") === "1";
-    } catch {
-      return false;
-    }
+  // How you like to look at tasks is remembered on this device; the filters
+  // for as long as this tab is open, so opening a task and coming back keeps them.
+  const [savedView, setView] = useStored<View | null>("numu.tasks.view", null, "local");
+  const view: View = savedView ?? (desktop ? "board" : "list");
+  const [group, setGroup] = useStored<Group>("numu.tasks.group", "status", "local");
+  const [stored, setStored] = useStored<Filters>("numu.tasks.filters", NO_FILTERS);
+  const [f, setFilters] = useState<Filters>(() => {
+    const fresh = { ...NO_FILTERS, month: planningMonth, planned: planningMonth };
+    // A link here with filters in it (a client's "View tasks", "My late work") wins.
+    if (params.size)
+      return {
+        ...fresh,
+        q: params.get("q") ?? "",
+        client: params.get("client") ?? "",
+        owner: params.get("owner") === "me" ? me.id : (params.get("owner") ?? ""),
+        status: params.get("status") ?? "",
+      };
+    return stored.planned === planningMonth ? stored : fresh;
   });
-  function toggleSubtasks() {
-    setShowSubtasks((v) => {
-      try {
-        localStorage.setItem("numu.tasks.subtasks", v ? "0" : "1");
-      } catch {}
-      return !v;
-    });
-  }
+  const setF = (patch: Partial<Filters>) => {
+    const next = { ...f, ...patch };
+    setFilters(next);
+    setStored(next);
+  };
+  const { q, client, owner, type, status, month } = f;
+  const setMonth = (m: string) => setF({ month: m });
+  const [savedSubtasks, setSavedSubtasks] = useStored<boolean | number>("numu.tasks.subtasks", false, "local");
+  const showSubtasks = Boolean(savedSubtasks);
+  const toggleSubtasks = () => setSavedSubtasks(!showSubtasks);
   const project = params.get("project") ?? "";
 
   // Select mode: tick tasks on the board or the list, then delete them together.
@@ -125,6 +146,7 @@ export default function DeliverablesPage() {
       .sort((a, b) => a.due_date.localeCompare(b.due_date));
   }, [rows, month, planningMonth, project, client, owner, type, status, q, showSubtasks]);
 
+  const add = me.can_create_tasks;
   const columns: BoardColumn[] = useMemo(() => {
     if (group === "status") {
       // Every status is a column (empty ones fold into a slim rail), so any
@@ -134,20 +156,41 @@ export default function DeliverablesPage() {
         title: STATUS_META[s].en,
         color: STATUS_META[s].color,
         rows: visible.filter((r) => r.status === s),
+        onAdd: add && s === "planned" ? () => openNewTask() : undefined,
       }));
     }
     if (group === "client") {
       return data.clients
-        .map((c) => ({ key: c.id, title: c.name_en, rows: visible.filter((r) => r.client_id === c.id) }))
+        .map((c) => ({
+          key: c.id,
+          title: c.name_en,
+          rows: visible.filter((r) => r.client_id === c.id),
+          onAdd: add ? () => openNewTask({ clientId: c.id }) : undefined,
+        }))
         .filter((c) => c.rows.length > 0);
     }
     // Everyone active is a column, so work can be dragged onto anyone.
     const people: BoardColumn[] = data.team
       .filter((m) => m.is_active || visible.some((r) => r.owner_id === m.id))
-      .map((m) => ({ key: m.id, title: m.full_name, avatar: m.full_name, rows: visible.filter((r) => r.owner_id === m.id) }))
+      .map((m) => ({
+        key: m.id,
+        title: m.full_name,
+        avatar: m.full_name,
+        rows: visible.filter((r) => r.owner_id === m.id),
+        onAdd: add && m.is_active ? () => openNewTask({ ownerId: m.id }) : undefined,
+      }))
       .sort((a, b) => b.rows.length - a.rows.length || a.title.localeCompare(b.title));
     return [...people, { key: "none", title: "Unassigned", rows: visible.filter((r) => !r.owner_id) }];
-  }, [group, visible, data, status]);
+  }, [group, visible, data, status, add]);
+
+  // The list uses the same groups as the board; finished work starts folded.
+  const listGroups: RowGroup[] = useMemo(
+    () =>
+      columns
+        .filter((c) => c.rows.length > 0)
+        .map((c) => ({ key: c.key, title: c.title, color: c.color, avatar: c.avatar, rows: c.rows, collapsed: c.key === "done" || c.key === "posted" })),
+    [columns],
+  );
 
   // Dragging a card: by status moves it along (same rules as the database),
   // by person reassigns it. By client there's nothing to drag to.
@@ -166,22 +209,22 @@ export default function DeliverablesPage() {
   const onDrop = useCallback(
     (row: BoardRow, to: string): DropCheck => {
       if (group === "person") {
-        update(row.id, { owner_id: to === "none" ? null : to });
+        const before = row.owner_id;
+        const owner = to === "none" ? null : to;
+        update(row.id, { owner_id: owner });
+        const name = data.team.find((m) => m.id === owner)?.full_name;
+        notify(name ? `Given to ${firstName(name)}` : "Unassigned", "success", { label: "Undo", run: () => update(row.id, { owner_id: before }) });
         return { ok: true };
       }
-      const r = move(row.id, to as DeliverableStatus);
+      const r = moveIt(row, to as DeliverableStatus);
       return r.ok ? { ok: true } : { ok: false, reason: r.reason };
     },
-    [group, move, update],
+    [group, moveIt, update, notify, data.team],
   );
 
   const filtered = Boolean(q || client || owner || type || status || project);
   function clearAll() {
-    setQ("");
-    setClient("");
-    setOwner("");
-    setType("");
-    setStatus("");
+    setF({ q: "", client: "", owner: "", type: "", status: "" });
     if (params.size) router.replace("/deliverables", { scroll: false });
   }
 
@@ -191,29 +234,39 @@ export default function DeliverablesPage() {
     <>
       <PageHeader
         title="Tasks"
-        subtitle={projectName ? `${projectName} · ${visible.length} tasks` : `${visible.length} in ${formatMonth(month)}${month === planningMonth ? ", plus anything unfinished from before" : ""}`}
+        subtitle={
+          projectName ? (
+            `${projectName} · ${visible.length} tasks`
+          ) : (
+            <>
+              {visible.length} in {formatMonth(month)}
+              {/* Phones keep the top of the page short, so the work starts sooner. */}
+              {month === planningMonth ? <span className="hidden sm:inline">, plus anything unfinished from before</span> : null}
+            </>
+          )
+        }
         actions={
           <>
             {canPlan(role) && rows.length > 0 ? (
               selecting ? (
-                <Button onClick={stopSelecting}>
-                  <X /> Done selecting
+                <Button onClick={stopSelecting} aria-label="Done selecting">
+                  <X /> <span className="hidden sm:inline">Done selecting</span>
                 </Button>
               ) : (
-                <Button onClick={() => setSelecting(true)} title="Select tasks to delete">
-                  <CheckSquare /> Select
+                <Button onClick={() => setSelecting(true)} title="Select tasks to delete" aria-label="Select tasks">
+                  <CheckSquare /> <span className="hidden sm:inline">Select</span>
                 </Button>
               )
             ) : null}
             {!project ? (
-              <div className="flex items-center rounded-lg border border-line bg-surface shadow-sm">
+              <div className="flex flex-1 items-center rounded-lg border border-line bg-surface shadow-sm sm:flex-none">
                 <IconButton label="Previous month" onClick={() => setMonth(addMonths(month, -1))} className="size-9">
                   <ChevronLeft />
                 </IconButton>
                 <button
                   type="button"
                   onClick={() => setMonth(planningMonth)}
-                  className="min-w-[124px] px-1 text-center text-[13px] font-medium"
+                  className="min-w-[112px] flex-1 px-1 text-center text-[13px] font-medium"
                   title="Back to the current month"
                 >
                   {formatMonth(month)}
@@ -240,25 +293,48 @@ export default function DeliverablesPage() {
           <Search className="size-4 text-muted" />
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => setF({ q: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return;
+              if (q) setF({ q: "" });
+              else e.currentTarget.blur();
+            }}
+            data-page-filter
             placeholder="Filter by title, client, owner"
             aria-label="Filter tasks"
             className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted"
           />
+          {q ? null : (
+            <span className="hidden md:block">
+              <Kbd>/</Kbd>
+            </span>
+          )}
         </label>
-        <div className="no-scrollbar -mx-4 flex w-[calc(100%+2rem)] gap-2 overflow-x-auto px-4 sm:mx-0 sm:w-auto sm:overflow-visible sm:px-0">
-          <SelectFilter label="Client" value={client} onChange={setClient} options={[{ value: "", label: "All clients" }, ...data.clients.map((c) => ({ value: c.id, label: c.name_en }))]} />
+        {/* Phones: one row that scrolls sideways. Larger screens: these sit in the row above. */}
+        <div className="no-scrollbar -mx-4 flex w-[calc(100%+2rem)] gap-2 overflow-x-auto px-4 sm:contents">
+          <SelectFilter
+            label="Group"
+            className="sm:hidden"
+            value={group}
+            onChange={(v) => setGroup(v as Group)}
+            options={[
+              { value: "status", label: "Status" },
+              { value: "client", label: "Client" },
+              { value: "person", label: "Person" },
+            ]}
+          />
+          <SelectFilter label="Client" value={client} onChange={(v) => setF({ client: v })} options={[{ value: "", label: "All clients" }, ...data.clients.map((c) => ({ value: c.id, label: c.name_en }))]} />
           <SelectFilter
             label="Owner"
             value={owner}
-            onChange={setOwner}
+            onChange={(v) => setF({ owner: v })}
             options={[{ value: "", label: "Everyone" }, { value: me.id, label: "Me" }, ...data.team.filter((m) => m.id !== me.id).map((m) => ({ value: m.id, label: m.full_name }))]}
           />
-          <SelectFilter label="Type" value={type} onChange={setType} options={[{ value: "", label: "All types" }, ...data.deliverableTypes.map((t) => ({ value: t.code, label: t.name_en }))]} />
+          <SelectFilter label="Type" value={type} onChange={(v) => setF({ type: v })} options={[{ value: "", label: "All types" }, ...data.deliverableTypes.map((t) => ({ value: t.code, label: t.name_en }))]} />
           <SelectFilter
             label="Status"
             value={status}
-            onChange={setStatus}
+            onChange={(v) => setF({ status: v })}
             options={[{ value: "", label: "Any status" }, ...STATUSES.map((s: DeliverableStatus) => ({ value: s, label: STATUS_META[s].en }))]}
           />
           {filtered ? (
@@ -266,18 +342,17 @@ export default function DeliverablesPage() {
               <X /> Clear
             </Button>
           ) : null}
-        </div>
-        <Button
-          variant={showSubtasks ? "primary" : "secondary"}
-          onClick={toggleSubtasks}
-          aria-pressed={showSubtasks}
-          title={showSubtasks ? "Subtasks show as their own cards" : "Subtasks are inside their task"}
-          className="sm:ml-auto"
-        >
-          <ListTree /> Subtasks {showSubtasks ? "shown" : "inside"}
-        </Button>
-        {view === "board" ? (
+          <Button
+            variant={showSubtasks ? "primary" : "secondary"}
+            onClick={toggleSubtasks}
+            aria-pressed={showSubtasks}
+            title={showSubtasks ? "Subtasks show as their own cards" : "Subtasks are inside their task"}
+            className="sm:ml-auto"
+          >
+            <ListTree /> Subtasks {showSubtasks ? "shown" : "inside"}
+          </Button>
           <Segmented
+            className="hidden sm:inline-flex"
             value={group}
             onChange={setGroup}
             options={[
@@ -286,7 +361,7 @@ export default function DeliverablesPage() {
               { value: "person", label: "By person" },
             ]}
           />
-        ) : null}
+        </div>
       </div>
 
       {visible.length === 0 && !filtered ? (
@@ -332,7 +407,14 @@ export default function DeliverablesPage() {
         </>
       ) : (
         <Card className="overflow-hidden">
-          <DeliverableTable rows={visible} today={today} empty="Nothing matches these filters." selection={selecting ? selection : undefined} />
+          <DeliverableTable
+            groups={listGroups}
+            today={today}
+            showClient={group !== "client"}
+            showOwner={group !== "person"}
+            empty="Nothing matches these filters."
+            selection={selecting ? selection : undefined}
+          />
         </Card>
       )}
 

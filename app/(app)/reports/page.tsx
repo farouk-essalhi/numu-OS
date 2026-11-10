@@ -8,6 +8,7 @@ import { addDays, formatHours, formatShort, qatarDate, weekDays } from "@/lib/da
 import { approvalHours, clientReports, onTimeBetween, weeklyOnTime } from "@/lib/insights";
 import { useNumu } from "@/lib/store";
 import { isDone } from "@/lib/workflow";
+import { clientHref } from "@/lib/routes";
 
 type Range = "4" | "12";
 
@@ -110,7 +111,7 @@ export default function ReportsPage() {
         </Card>
         <Card>
           <CardHeader title="Posting activity" subtitle="Deliverables that went live each day, last 18 weeks" action={<HeatScale />} />
-          <div className="scroll-thin overflow-x-auto px-4 pb-5 sm:px-5">
+          <div className="scroll-thin relative overflow-x-auto px-4 pb-5 sm:px-5">
             <Heatmap title="Deliverables posted per day" cells={heat} />
           </div>
         </Card>
@@ -118,7 +119,7 @@ export default function ReportsPage() {
 
       <Card className="mt-4 overflow-hidden">
         <CardHeader title="By client" subtitle="Same period" />
-        <div className="scroll-thin overflow-x-auto border-t border-line">
+        <div className="scroll-thin relative overflow-x-auto border-t border-line">
           <table className="w-full min-w-[620px] text-[13px]">
             <thead className="border-b border-line bg-surface-2 text-[12px] text-muted">
               <tr>
@@ -133,7 +134,7 @@ export default function ReportsPage() {
               {byClient.map((c) => (
                 <tr key={c.client.id} className="hover:bg-surface-2">
                   <td className="py-3 pr-3 pl-5">
-                    <Link href={`/clients/${c.client.id}`} className="flex items-center gap-2.5 font-medium hover:underline">
+                    <Link href={clientHref(c.client.id)} className="flex items-center gap-2.5 font-medium hover:underline">
                       <Avatar name={c.client.name_en} size={26} square />
                       {c.client.name_en}
                     </Link>

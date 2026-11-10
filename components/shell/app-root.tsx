@@ -7,6 +7,7 @@ import { Button } from "@/components/ui";
 import { AppShell, Logo } from "./app-shell";
 import { ShellSkeleton } from "./skeleton";
 import { loginEmail, setMyLogin } from "@/lib/backend";
+import { clearCache } from "@/lib/cache";
 import { authPasswordError } from "@/lib/logins";
 import { liveBoot, NumuProvider, supabaseConfigured } from "@/lib/store";
 import { supabase } from "@/lib/supabase";
@@ -25,6 +26,7 @@ const liveLoginActions = (myEmail: string): LoginActions => ({
   setUsername: (username) => setMyLogin(supabase(), username),
   signOut: async () => {
     await supabase().auth.signOut();
+    clearCache();
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     location.assign("/login");
   },
@@ -62,7 +64,10 @@ function LiveRoot({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data } = supabase().auth.onAuthStateChange((event) => {
-      if (event === "SIGNED_OUT") location.replace("/login");
+      if (event === "SIGNED_OUT") {
+        clearCache();
+        location.replace("/login");
+      }
     });
     return () => data.subscription.unsubscribe();
   }, []);
@@ -83,6 +88,7 @@ function LiveRoot({ children }: { children: ReactNode }) {
           <Button
             onClick={async () => {
               await supabase().auth.signOut();
+              clearCache();
               // eslint-disable-next-line @next/next/no-location-assign-relative-destination
               location.assign("/login");
             }}
@@ -113,11 +119,12 @@ function LiveRoot({ children }: { children: ReactNode }) {
     // A fresh load afterwards, so every screen sees the new username.
     return <FirstLogin member={me} email={boot.email} actions={liveLoginActions(boot.email)} onDone={() => {
       setSetUp(true);
+      clearCache();
       location.reload();
     }} />;
   }
   return (
-    <NumuProvider live={{ data: boot.data, meId: boot.meId }}>
+    <NumuProvider live={{ data: boot.data, meId: boot.meId, userId: boot.userId, cachedAt: boot.cachedAt }}>
       <AppShell>{children}</AppShell>
     </NumuProvider>
   );
